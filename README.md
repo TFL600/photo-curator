@@ -22,15 +22,3 @@ IMG_0225|02/05/2026,IMG_0226|02/05/2026
 
 > **[Install "Delete Photos From Text" →](https://www.icloud.com/shortcuts/5bc67e3382ac4089809647bb871aacb4)**
 
-Or build it manually:
-1. Open the **Shortcuts** app
-2. Create a new shortcut named exactly `Delete Photos From Text`
-3. Add a **Find Photos** action filtered by filename/date matching the input
-4. Add a **Delete Photos** action
-
-### Sharing your Shortcut
-
-To generate an iCloud install link for others:
-1. Open the **Shortcuts** app
-2. Long-press your shortcut → **Share** → **Copy iCloud Link**
-3. Anyone can tap that link to install it on their device
