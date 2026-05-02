@@ -176,18 +176,6 @@
     }
     #decision-icon.show { transform: translate(-50%, -50%) scale(1); }
 
-    /* tap zones */
-    .tap-zone {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 35%;
-      z-index: 30;
-      opacity: 0;
-    }
-    #tap-left { left: 0; }
-    #tap-right { right: 0; }
-
     /* hint arrows */
     .hint {
       position: absolute;
@@ -324,16 +312,13 @@
 <!-- SWIPER -->
 <div id="screen-swiper" class="screen">
   <div id="swiper-counter">1 / 1</div>
-  <button id="btn-undo" aria-label="Undo" style="position:absolute;bottom:calc(24px + var(--safe-bottom));left:50%;transform:translateX(-50%);z-index:20;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:999px;font-size:15px;font-weight:500;padding:10px 28px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:pointer;display:none;min-height:44px;">↩ Undo</button>
+  <button id="btn-undo" aria-label="Undo" style="position:absolute;bottom:calc(24px + var(--safe-bottom));left:50%;transform:translateX(-50%);z-index:40;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:999px;font-size:15px;font-weight:500;padding:10px 28px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:pointer;display:none;min-height:44px;">↩ Undo</button>
 
   <div id="photo-container">
     <img id="photo-img" src="" alt="">
     <div id="decision-overlay"></div>
     <div id="decision-icon"></div>
   </div>
-
-  <div class="tap-zone" id="tap-left"></div>
-  <div class="tap-zone" id="tap-right"></div>
 
   <div class="hint" id="hint-left">
     <span class="hint-icon">👈</span>
@@ -560,15 +545,6 @@ document.getElementById('screen-swiper').addEventListener('touchend', (e) => {
     return;
   }
 
-  // tap zones
-  const x = e.changedTouches[0].clientX;
-  const w = window.innerWidth;
-  if (x < w * 0.35) {
-    decide('delete');
-  } else if (x > w * 0.65) {
-    decide('keep');
-  }
-  // middle zone: no action
 }, { passive: true });
 
 // ── Keyboard (desktop testing) ─────────────────────────
@@ -580,9 +556,6 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ── Tap zones ───────────────────────────────────────────
-tapLeft.addEventListener('click',  () => decide('delete'));
-tapRight.addEventListener('click', () => decide('keep'));
-
 document.getElementById('btn-undo').addEventListener('click', undo);
 
 // ── Hint arrows ─────────────────────────────────────────
