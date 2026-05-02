@@ -316,7 +316,7 @@
 <div id="screen-landing" class="screen active">
   <div class="landing-icon">📸</div>
   <h1 class="landing-title">Photo Curator</h1>
-  <p class="landing-sub">Swipe right to keep, left to delete. Clean up your camera roll in seconds.</p>
+  <p class="landing-sub">Swipe left to keep, right to delete. Clean up your camera roll in seconds.</p>
   <button class="btn-primary" id="btn-select">Select Photos</button>
   <input type="file" id="file-input" accept="image/*" multiple>
 </div>
@@ -336,11 +336,11 @@
 
   <div class="hint" id="hint-left">
     <span class="hint-icon">👈</span>
-    <span class="hint-label">Keep</span>
+    <span class="hint-label">Delete</span>
   </div>
   <div class="hint" id="hint-right">
     <span class="hint-icon">👉</span>
-    <span class="hint-label">Delete</span>
+    <span class="hint-label">Keep</span>
   </div>
 </div>
 
@@ -508,11 +508,11 @@ document.getElementById('screen-swiper').addEventListener('touchmove', (e) => {
     photoContainer.style.transform = `translateX(${dx}px) rotate(${dx * 0.02}deg)`;
     const ratio = Math.min(Math.abs(dx) / 80, 1);
     if (dx < 0) {
-      decisionOverlay.className = 'delete';
-      decisionIcon.textContent = '✕';
-    } else {
       decisionOverlay.className = 'keep';
       decisionIcon.textContent = '✓';
+    } else {
+      decisionOverlay.className = 'delete';
+      decisionIcon.textContent = '✕';
     }
     decisionOverlay.style.opacity = String(ratio * 0.8);
     if (ratio > 0.4) {
@@ -529,8 +529,8 @@ document.getElementById('screen-swiper').addEventListener('touchend', (e) => {
   if (dragging && Math.abs(dx) > 50) {
     // committed swipe
     decisionOverlay.style.opacity = '';
-    if (dx < 0) decide('delete');
-    else decide('keep');
+    if (dx < 0) decide('keep');
+    else decide('delete');
     return;
   }
 
@@ -550,9 +550,9 @@ document.getElementById('screen-swiper').addEventListener('touchend', (e) => {
   const x = e.changedTouches[0].clientX;
   const w = window.innerWidth;
   if (x < w * 0.35) {
-    decide('keep');
-  } else if (x > w * 0.65) {
     decide('delete');
+  } else if (x > w * 0.65) {
+    decide('keep');
   }
   // middle zone: no action
 }, { passive: true });
@@ -560,13 +560,13 @@ document.getElementById('screen-swiper').addEventListener('touchend', (e) => {
 // ── Keyboard (desktop testing) ─────────────────────────
 document.addEventListener('keydown', (e) => {
   if (!screens.swiper.classList.contains('active')) return;
-  if (e.key === 'ArrowLeft')  decide('keep');
-  if (e.key === 'ArrowRight') decide('delete');
+  if (e.key === 'ArrowLeft')  decide('delete');
+  if (e.key === 'ArrowRight') decide('keep');
 });
 
 // ── Tap zones ───────────────────────────────────────────
-tapLeft.addEventListener('click',  () => decide('keep'));
-tapRight.addEventListener('click', () => decide('delete'));
+tapLeft.addEventListener('click',  () => decide('delete'));
+tapRight.addEventListener('click', () => decide('keep'));
 
 // ── Hint arrows ─────────────────────────────────────────
 function showHints() {
