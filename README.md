@@ -20,7 +20,7 @@ IMG_0225|02/05/2026,IMG_0226|02/05/2026
 
 ### Installing the Shortcut
 
-> **[Install "Delete Photos From Text" →](ADD_YOUR_ICLOUD_SHORTCUT_LINK_HERE)**
+> **[Install "Delete Photos From Text" →](https://www.icloud.com/shortcuts/5bc67e3382ac4089809647bb871aacb4)**
 
 Or build it manually:
 1. Open the **Shortcuts** app
