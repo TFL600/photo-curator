@@ -634,6 +634,9 @@ btnRestart.addEventListener('click', () => {
   index = 0;
   showScreen('landing');
 });
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/photo-curator/sw.js');
+}
 </script>
 </body>
 </html>
