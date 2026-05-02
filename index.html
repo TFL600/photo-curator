@@ -354,6 +354,8 @@
   <div class="thumb-grid" id="thumb-grid"></div>
   <div class="confirm-actions">
     <button class="btn-danger" id="btn-delete">Delete via Shortcuts</button>
+    <button class="btn-ghost" id="btn-copy">Copy input string</button>
+    <pre id="debug-string" style="display:none;font-size:11px;background:#f0ede8;border-radius:8px;padding:12px;word-break:break-all;white-space:pre-wrap;color:#33302a;margin-top:4px;"></pre>
     <button class="btn-ghost" id="btn-restart">Start over</button>
   </div>
 </div>
@@ -609,13 +611,29 @@ function showConfirm() {
 }
 
 // ── Delete via Shortcuts ────────────────────────────────
-btnDelete.addEventListener('click', () => {
-  const toDelete = photos.filter(p => p.decision === 'delete');
-  if (!toDelete.length) return;
+function buildInput() {
+  return photos.filter(p => p.decision === 'delete').map(p => `${p.name}|${p.date}`).join(',');
+}
 
-  const input = toDelete.map(p => `${p.name}|${p.date}`).join(',');
+btnDelete.addEventListener('click', () => {
+  const input = buildInput();
+  if (!input) return;
   const url = 'shortcuts://run-shortcut?name=Delete%20Photos%20From%20Text&input=' + encodeURIComponent(input);
   window.location.href = url;
+});
+
+const btnCopy = document.getElementById('btn-copy');
+const debugString = document.getElementById('debug-string');
+btnCopy.addEventListener('click', () => {
+  const input = buildInput();
+  debugString.textContent = input;
+  debugString.style.display = 'block';
+  navigator.clipboard.writeText(input).then(() => {
+    btnCopy.textContent = 'Copied!';
+    setTimeout(() => { btnCopy.textContent = 'Copy input string'; }, 2000);
+  }).catch(() => {
+    btnCopy.textContent = 'See string below';
+  });
 });
 
 // ── Restart ─────────────────────────────────────────────
