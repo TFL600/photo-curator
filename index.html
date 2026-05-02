@@ -186,10 +186,9 @@
       align-items: center;
       gap: 4px;
       pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.4s;
+      opacity: 0.6;
     }
-    .hint.visible { opacity: 1; }
+    .hint.visible { opacity: 0.6; }
     #hint-left { left: 20px; }
     #hint-right { right: 20px; }
 
@@ -342,7 +341,8 @@
     <button class="btn-danger" id="btn-delete">Delete via Shortcuts</button>
     <button class="btn-ghost" id="btn-copy">Copy input string</button>
     <pre id="debug-string" style="display:none;font-size:11px;background:#f0ede8;border-radius:8px;padding:12px;word-break:break-all;white-space:pre-wrap;color:#33302a;margin-top:4px;"></pre>
-    <button class="btn-ghost" id="btn-restart">Start over</button>
+    <button class="btn-ghost" id="btn-reswipe">Restart swiping</button>
+    <button class="btn-ghost" id="btn-restart">Select new photos</button>
   </div>
 </div>
 
@@ -560,14 +560,8 @@ document.getElementById('btn-undo').addEventListener('click', undo);
 
 // ── Hint arrows ─────────────────────────────────────────
 function showHints() {
-  if (hintsShown) return;
-  hintsShown = true;
   hintLeft.classList.add('visible');
   hintRight.classList.add('visible');
-  setTimeout(() => {
-    hintLeft.classList.remove('visible');
-    hintRight.classList.remove('visible');
-  }, 2500);
 }
 
 // ── Confirm screen ──────────────────────────────────────
@@ -624,7 +618,16 @@ btnCopy.addEventListener('click', () => {
   });
 });
 
-// ── Restart ─────────────────────────────────────────────
+// ── Restart swiping (same photos, reset decisions) ──────
+document.getElementById('btn-reswipe').addEventListener('click', () => {
+  photos.forEach(p => { p.decision = null; });
+  index = 0;
+  showScreen('swiper');
+  loadPhoto(0);
+  showHints();
+});
+
+// ── Select new photos ────────────────────────────────────
 btnRestart.addEventListener('click', () => {
   photos.forEach(p => URL.revokeObjectURL(p.url));
   photos = [];
