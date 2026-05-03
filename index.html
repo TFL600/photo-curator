@@ -237,6 +237,27 @@
       letter-spacing: 0.02em;
     }
 
+    #btn-rotate {
+      position: absolute;
+      top: calc(12px + var(--safe-top));
+      left: 16px;
+      z-index: 40;
+      background: rgba(255,255,255,0.13);
+      color: rgba(255,255,255,0.88);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      line-height: 1;
+      padding: 9px 14px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      cursor: pointer;
+      min-height: 40px;
+      min-width: 40px;
+    }
+    #btn-rotate:active { opacity: 0.65; }
+
     #btn-stop {
       position: absolute;
       top: calc(12px + var(--safe-top));
@@ -304,6 +325,7 @@
       -webkit-user-drag: none;
       pointer-events: none;
       user-select: none;
+      transition: transform 0.25s ease;
     }
 
     #decision-overlay {
@@ -572,6 +594,7 @@
 <div id="screen-swiper" class="screen">
   <div id="swiper-progress"><div id="swiper-progress-fill"></div></div>
   <div id="swiper-counter">1 / 1</div>
+  <button id="btn-rotate" aria-label="Rotate photo">↻</button>
   <button id="btn-stop" aria-label="Stop swiping">Done</button>
   <button id="btn-undo" aria-label="Undo">↩ Undo</button>
 
@@ -712,10 +735,11 @@ fileInput.addEventListener('change', async () => {
 
   photos = await Promise.all(files.map(async (file) => ({
     file,
-    url:  URL.createObjectURL(file),
-    name: file.name.replace(/\.[^.]+$/, ''),
-    date: await getPhotoDate(file),
+    url:      URL.createObjectURL(file),
+    name:     file.name.replace(/\.[^.]+$/, ''),
+    date:     await getPhotoDate(file),
     decision: null,
+    rotation: 0,
   })));
 
   photos.sort((a, b) => {
@@ -742,6 +766,9 @@ const btnUndo = document.getElementById('btn-undo');
 function loadPhoto(i) {
   const p = photos[i];
   photoImg.src = p.url;
+  photoImg.style.transition = 'none';
+  photoImg.style.transform = p.rotation ? `rotate(${p.rotation}deg)` : '';
+  requestAnimationFrame(() => { photoImg.style.transition = ''; });
   photoContainer.style.transform = '';
   photoContainer.style.opacity = '';
   decisionOverlay.className = '';
@@ -752,6 +779,12 @@ function loadPhoto(i) {
   progressFill.style.width = `${(i + 1) / photos.length * 100}%`;
   btnUndo.style.display = i > 0 ? 'block' : 'none';
 }
+
+document.getElementById('btn-rotate').addEventListener('click', () => {
+  if (!photos.length) return;
+  photos[index].rotation = (photos[index].rotation + 90) % 360;
+  photoImg.style.transform = photos[index].rotation ? `rotate(${photos[index].rotation}deg)` : '';
+});
 
 function undo() {
   if (index === 0) return;
