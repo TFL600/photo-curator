@@ -14,18 +14,19 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #faf8f5;
+      --bg: #f7f4f0;
       --card: #ffffff;
-      --text: #33302a;
-      --text-light: #8a8580;
-      --border: #e7e3de;
+      --text: #1e1b17;
+      --text-light: #8a8075;
+      --border: #e8e3db;
       --keep: #2d6a4f;
-      --delete: #c0392b;
-      --keep-light: #d4edda;
-      --delete-light: #fde8e8;
+      --delete: #b83232;
+      --keep-bg: rgba(45, 106, 79, 0.88);
+      --delete-bg: rgba(184, 50, 50, 0.88);
       --radius-md: 12px;
       --radius-lg: 16px;
-      --radius-xl: 24px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.11), 0 2px 4px rgba(0,0,0,0.06);
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --safe-left: env(safe-area-inset-left, 0px);
@@ -55,23 +56,38 @@
       align-items: center;
       justify-content: center;
       background: var(--bg);
-      padding: 24px;
-      padding-top: calc(24px + var(--safe-top));
-      padding-bottom: calc(24px + var(--safe-bottom));
+      padding: 32px 28px;
+      padding-top: calc(32px + var(--safe-top));
+      padding-bottom: calc(32px + var(--safe-bottom));
     }
 
-    .landing-icon {
-      font-size: 64px;
-      margin-bottom: 24px;
-      line-height: 1;
+    .landing-icon-wrap {
+      width: 84px;
+      height: 84px;
+      background: var(--text);
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 28px;
+      box-shadow: var(--shadow-md);
+    }
+    .landing-icon-wrap svg {
+      width: 40px;
+      height: 40px;
+      fill: none;
+      stroke: #fff;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .landing-title {
       font-family: 'Fraunces', serif;
-      font-size: 36px;
+      font-size: 34px;
       font-weight: 600;
       color: var(--text);
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       text-align: center;
     }
 
@@ -79,26 +95,40 @@
       font-size: 15px;
       color: var(--text-light);
       text-align: center;
-      max-width: 280px;
-      line-height: 1.5;
-      margin-bottom: 24px;
+      max-width: 260px;
+      line-height: 1.6;
+      margin-bottom: 28px;
     }
 
     .landing-last {
-      font-size: 13px;
-      color: var(--text-light);
-      text-align: center;
-      max-width: 280px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      width: 100%;
+      max-width: 300px;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 10px 16px;
-      margin-bottom: 32px;
-      line-height: 1.5;
+      border-radius: var(--radius-lg);
+      padding: 13px 15px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
     }
-    .landing-last strong { color: var(--text); font-weight: 500; }
+    .landing-last-icon {
+      font-size: 15px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      opacity: 0.7;
+    }
+    .landing-last-text {
+      font-size: 13px;
+      color: var(--text-light);
+      line-height: 1.55;
+    }
+    .landing-last-text strong { color: var(--text); font-weight: 500; }
 
     .btn-primary {
+      width: 100%;
+      max-width: 300px;
       background: var(--text);
       color: #fff;
       border: none;
@@ -106,39 +136,80 @@
       font-family: 'Outfit', sans-serif;
       font-size: 17px;
       font-weight: 500;
-      padding: 16px 40px;
+      padding: 17px 40px;
       cursor: pointer;
-      transition: transform 0.1s, opacity 0.1s;
-      min-height: 54px;
+      transition: transform 0.12s, opacity 0.12s;
+      min-height: 56px;
+      box-shadow: var(--shadow-md);
     }
-    .btn-primary:active { transform: scale(0.97); opacity: 0.85; }
+    .btn-primary:active { transform: scale(0.97); opacity: 0.9; }
 
     #file-input { display: none; }
 
     /* ── SWIPER ── */
     #screen-swiper {
-      background: #000;
+      background: #0a0a0a;
       flex-direction: column;
       overflow: hidden;
     }
 
+    #swiper-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(255,255,255,0.1);
+      z-index: 30;
+    }
+    #swiper-progress-fill {
+      height: 100%;
+      background: rgba(255,255,255,0.65);
+      transition: width 0.3s ease;
+    }
+
     #swiper-counter {
       position: absolute;
-      top: calc(16px + var(--safe-top));
+      top: calc(12px + var(--safe-top));
       left: 50%;
       transform: translateX(-50%);
       z-index: 20;
-      background: rgba(0,0,0,0.55);
-      color: #fff;
-      font-size: 14px;
+      background: rgba(0,0,0,0.48);
+      color: rgba(255,255,255,0.88);
+      font-size: 13px;
       font-weight: 500;
       padding: 5px 14px;
       border-radius: 999px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       white-space: nowrap;
       pointer-events: none;
+      letter-spacing: 0.02em;
     }
+
+    #btn-undo {
+      position: absolute;
+      bottom: calc(20px + var(--safe-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 40;
+      background: rgba(255,255,255,0.13);
+      color: rgba(255,255,255,0.88);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 9px 24px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      cursor: pointer;
+      display: none;
+      min-height: 40px;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+    #btn-undo:active { opacity: 0.65; }
 
     #photo-container {
       position: absolute;
@@ -149,7 +220,6 @@
       will-change: transform;
       transition: none;
     }
-
     #photo-container.animating {
       transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.28s ease;
     }
@@ -165,58 +235,65 @@
       user-select: none;
     }
 
-    /* decision overlay tint */
     #decision-overlay {
       position: absolute;
       inset: 0;
       pointer-events: none;
       z-index: 10;
       opacity: 0;
-      transition: opacity 0.1s;
+      transition: opacity 0.08s;
     }
-    #decision-overlay.keep { background: rgba(45, 106, 79, 0.35); opacity: 1; }
-    #decision-overlay.delete { background: rgba(192, 57, 43, 0.35); opacity: 1; }
+    #decision-overlay.keep   { background: linear-gradient(120deg, rgba(45,106,79,0.55), rgba(45,106,79,0.18)); opacity: 1; }
+    #decision-overlay.delete { background: linear-gradient(240deg, rgba(184,50,50,0.55), rgba(184,50,50,0.18)); opacity: 1; }
 
-    /* decision icon */
     #decision-icon {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%) scale(0);
       z-index: 15;
-      font-size: 80px;
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
+      color: #fff;
       pointer-events: none;
-      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     #decision-icon.show { transform: translate(-50%, -50%) scale(1); }
+    #decision-icon[data-action="keep"]   { background: var(--keep-bg);   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    #decision-icon[data-action="delete"] { background: var(--delete-bg); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 
-    /* hint arrows */
+    /* hints */
     .hint {
       position: absolute;
-      bottom: calc(48px + var(--safe-bottom));
+      bottom: calc(50px + var(--safe-bottom));
       z-index: 25;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       pointer-events: none;
-      opacity: 0.6;
+      opacity: 0.72;
     }
-    .hint.visible { opacity: 0.6; }
-    #hint-left { left: 20px; }
-    #hint-right { right: 20px; }
-
-    .hint-icon {
-      font-size: 26px;
-      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7));
+    #hint-left  { left: 18px; align-items: flex-start; }
+    #hint-right { right: 18px; align-items: flex-end; }
+    .hint-arrow {
+      font-size: 22px;
+      color: #fff;
+      line-height: 1;
+      filter: drop-shadow(0 1px 4px rgba(0,0,0,0.55));
     }
     .hint-label {
       font-size: 11px;
       font-weight: 600;
-      color: #fff;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      color: rgba(255,255,255,0.85);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.65);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.08em;
     }
 
     /* ── CONFIRM ── */
@@ -225,83 +302,163 @@
       background: var(--bg);
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
+      padding: calc(28px + var(--safe-top)) 20px calc(32px + var(--safe-bottom));
     }
 
     .confirm-header {
       text-align: center;
-      margin-bottom: 28px;
+      margin-bottom: 20px;
     }
-
-    .confirm-icon { font-size: 48px; margin-bottom: 12px; }
-
+    .confirm-icon { font-size: 40px; margin-bottom: 10px; }
     .confirm-title {
       font-family: 'Fraunces', serif;
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 600;
-      margin-bottom: 6px;
     }
 
-    .confirm-sub {
-      font-size: 14px;
+    /* stats row */
+    .confirm-stats {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .stat-tile {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 12px;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-tile.stat-delete-tile {
+      border-color: rgba(184,50,50,0.22);
+      background: rgba(184,50,50,0.04);
+    }
+    .stat-num {
+      display: block;
+      font-family: 'Fraunces', serif;
+      font-size: 30px;
+      font-weight: 600;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .stat-tile.stat-delete-tile .stat-num { color: var(--delete); }
+    .stat-tile:not(.stat-delete-tile) .stat-num { color: var(--keep); }
+    .stat-label-sm {
+      font-size: 11px;
+      font-weight: 600;
       color: var(--text-light);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
     }
 
+    /* thumb grid */
     .thumb-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-      margin-bottom: 32px;
+      gap: 3px;
+      margin-bottom: 20px;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
     }
-
     .thumb-item {
       position: relative;
       aspect-ratio: 1;
-      border-radius: 8px;
-      overflow: hidden;
       background: var(--border);
     }
-
     .thumb-item img {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
     }
+    .thumb-badge {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+      width: 20px;
+      height: 20px;
+      background: var(--delete);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
+    /* actions */
     .confirm-actions {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
     .btn-danger {
       background: var(--delete);
       color: #fff;
       border: none;
-      border-radius: 999px;
+      border-radius: var(--radius-lg);
       font-family: 'Outfit', sans-serif;
       font-size: 17px;
       font-weight: 500;
-      padding: 16px 24px;
+      padding: 17px 24px;
       cursor: pointer;
       transition: transform 0.1s, opacity 0.1s;
-      min-height: 54px;
+      min-height: 56px;
+      text-align: center;
+      box-shadow: 0 4px 14px rgba(184,50,50,0.28);
+    }
+    .btn-danger:active { transform: scale(0.98); opacity: 0.9; }
+
+    .actions-secondary {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-ghost {
+      display: block;
+      width: 100%;
+      background: transparent;
+      color: var(--text);
+      border: none;
+      border-top: 1px solid var(--border);
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 400;
+      padding: 15px 16px;
+      cursor: pointer;
       text-align: center;
     }
-    .btn-danger:active { transform: scale(0.97); opacity: 0.85; }
+    .btn-ghost:first-child { border-top: none; }
+    .btn-ghost:active { background: var(--bg); }
 
-    .btn-ghost {
+    .btn-debug {
       background: transparent;
       color: var(--text-light);
       border: none;
       font-family: 'Outfit', sans-serif;
-      font-size: 15px;
-      padding: 12px;
+      font-size: 13px;
+      padding: 8px;
       cursor: pointer;
       text-align: center;
     }
-    .btn-ghost:active { opacity: 0.6; }
+    .btn-debug:active { opacity: 0.6; }
+
+    pre#debug-string {
+      font-size: 11px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      word-break: break-all;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
 
     .empty-state {
       text-align: center;
@@ -315,18 +472,27 @@
 
 <!-- LANDING -->
 <div id="screen-landing" class="screen active">
-  <div class="landing-icon">📸</div>
+  <div class="landing-icon-wrap">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </svg>
+  </div>
   <h1 class="landing-title">Photo Curator</h1>
   <p class="landing-sub">Swipe left to delete, right to keep. Clean up your camera roll in seconds.</p>
-  <div class="landing-last" id="landing-last" style="display:none"></div>
+  <div class="landing-last" id="landing-last" style="display:none">
+    <span class="landing-last-icon">🕐</span>
+    <span class="landing-last-text" id="landing-last-text"></span>
+  </div>
   <button class="btn-primary" id="btn-select">Select Photos</button>
   <input type="file" id="file-input" accept="image/*" multiple>
 </div>
 
 <!-- SWIPER -->
 <div id="screen-swiper" class="screen">
+  <div id="swiper-progress"><div id="swiper-progress-fill"></div></div>
   <div id="swiper-counter">1 / 1</div>
-  <button id="btn-undo" aria-label="Undo" style="position:absolute;bottom:calc(24px + var(--safe-bottom));left:50%;transform:translateX(-50%);z-index:40;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:999px;font-size:15px;font-weight:500;padding:10px 28px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:pointer;display:none;min-height:44px;">↩ Undo</button>
+  <button id="btn-undo" aria-label="Undo">↩ Undo</button>
 
   <div id="photo-container">
     <img id="photo-img" src="" alt="">
@@ -335,11 +501,11 @@
   </div>
 
   <div class="hint" id="hint-left">
-    <span class="hint-icon">👈</span>
+    <span class="hint-arrow">←</span>
     <span class="hint-label">Delete</span>
   </div>
   <div class="hint" id="hint-right">
-    <span class="hint-icon">👉</span>
+    <span class="hint-arrow">→</span>
     <span class="hint-label">Keep</span>
   </div>
 </div>
@@ -348,16 +514,30 @@
 <div id="screen-confirm" class="screen">
   <div class="confirm-header">
     <div class="confirm-icon">🗑️</div>
-    <h2 class="confirm-title" id="confirm-title">Delete 0 photos?</h2>
-    <p class="confirm-sub" id="confirm-sub"></p>
+    <h2 class="confirm-title" id="confirm-title">Review</h2>
   </div>
+
+  <div class="confirm-stats" id="confirm-stats">
+    <div class="stat-tile">
+      <span class="stat-num" id="stat-kept">0</span>
+      <span class="stat-label-sm">kept</span>
+    </div>
+    <div class="stat-tile stat-delete-tile">
+      <span class="stat-num" id="stat-del">0</span>
+      <span class="stat-label-sm">to delete</span>
+    </div>
+  </div>
+
   <div class="thumb-grid" id="thumb-grid"></div>
+
   <div class="confirm-actions">
     <button class="btn-danger" id="btn-delete">Delete via Shortcuts</button>
-    <button class="btn-ghost" id="btn-copy">Copy input string</button>
-    <pre id="debug-string" style="display:none;font-size:11px;background:#f0ede8;border-radius:8px;padding:12px;word-break:break-all;white-space:pre-wrap;color:#33302a;margin-top:4px;"></pre>
-    <button class="btn-ghost" id="btn-reswipe">Restart swiping</button>
-    <button class="btn-ghost" id="btn-restart">Select new photos</button>
+    <div class="actions-secondary">
+      <button class="btn-ghost" id="btn-reswipe">Restart swiping</button>
+      <button class="btn-ghost" id="btn-restart">Select new photos</button>
+    </div>
+    <button class="btn-debug" id="btn-copy">Copy input string</button>
+    <pre id="debug-string" style="display:none"></pre>
   </div>
 </div>
 
@@ -376,7 +556,8 @@ let hintsShown = false;
   try {
     const { name, sessionDate } = JSON.parse(raw);
     const el = document.getElementById('landing-last');
-    el.innerHTML = `Last session on <strong>${sessionDate}</strong> — stopped at <strong>${name}</strong>`;
+    document.getElementById('landing-last-text').innerHTML =
+      `Last session on <strong>${sessionDate}</strong> — stopped at <strong>${name}</strong>`;
     el.style.display = '';
   } catch(_) {}
 })();
@@ -388,22 +569,20 @@ const screens = {
   confirm: document.getElementById('screen-confirm'),
 };
 
-const fileInput       = document.getElementById('file-input');
-const btnSelect       = document.getElementById('btn-select');
-const photoContainer  = document.getElementById('photo-container');
-const photoImg        = document.getElementById('photo-img');
-const decisionOverlay = document.getElementById('decision-overlay');
-const decisionIcon    = document.getElementById('decision-icon');
-const swiperCounter   = document.getElementById('swiper-counter');
-const tapLeft         = document.getElementById('tap-left');
-const tapRight        = document.getElementById('tap-right');
-const hintLeft        = document.getElementById('hint-left');
-const hintRight       = document.getElementById('hint-right');
-const confirmTitle    = document.getElementById('confirm-title');
-const confirmSub      = document.getElementById('confirm-sub');
-const thumbGrid       = document.getElementById('thumb-grid');
-const btnDelete       = document.getElementById('btn-delete');
-const btnRestart      = document.getElementById('btn-restart');
+const fileInput        = document.getElementById('file-input');
+const btnSelect        = document.getElementById('btn-select');
+const photoContainer   = document.getElementById('photo-container');
+const photoImg         = document.getElementById('photo-img');
+const decisionOverlay  = document.getElementById('decision-overlay');
+const decisionIcon     = document.getElementById('decision-icon');
+const swiperCounter    = document.getElementById('swiper-counter');
+const progressFill     = document.getElementById('swiper-progress-fill');
+const hintLeft         = document.getElementById('hint-left');
+const hintRight        = document.getElementById('hint-right');
+const confirmTitle     = document.getElementById('confirm-title');
+const thumbGrid        = document.getElementById('thumb-grid');
+const btnDelete        = document.getElementById('btn-delete');
+const btnRestart       = document.getElementById('btn-restart');
 
 // ── Screen helpers ──────────────────────────────────────
 function showScreen(name) {
@@ -442,7 +621,6 @@ fileInput.addEventListener('change', async () => {
   btnSelect.textContent = 'Loading…';
   btnSelect.disabled = true;
 
-  // revoke any previous object URLs
   photos.forEach(p => URL.revokeObjectURL(p.url));
 
   photos = await Promise.all(files.map(async (file) => ({
@@ -475,7 +653,9 @@ function loadPhoto(i) {
   decisionOverlay.className = '';
   decisionIcon.className = '';
   decisionIcon.textContent = '';
+  delete decisionIcon.dataset.action;
   swiperCounter.textContent = `${i + 1} / ${photos.length}`;
+  progressFill.style.width = `${(i + 1) / photos.length * 100}%`;
   btnUndo.style.display = i > 0 ? '' : 'none';
 }
 
@@ -496,16 +676,14 @@ function todayFormatted() {
 }
 
 function decide(action) {
-  // action: 'keep' | 'delete'
   photos[index].decision = action;
   localStorage.setItem('lastSwipe', JSON.stringify({ name: photos[index].name, sessionDate: todayFormatted() }));
 
-  // flash icon
   decisionOverlay.className = action;
+  decisionIcon.dataset.action = action;
   decisionIcon.textContent = action === 'keep' ? '✓' : '✕';
   decisionIcon.classList.add('show');
 
-  // animate card off screen
   const dir = action === 'keep' ? -1 : 1;
   photoContainer.classList.add('animating');
   photoContainer.style.transform = `translateX(${dir * 110}vw)`;
@@ -542,14 +720,11 @@ document.getElementById('screen-swiper').addEventListener('touchmove', (e) => {
   if (dragging) {
     photoContainer.style.transform = `translateX(${dx}px) rotate(${dx * 0.02}deg)`;
     const ratio = Math.min(Math.abs(dx) / 80, 1);
-    if (dx < 0) {
-      decisionOverlay.className = 'delete';
-      decisionIcon.textContent = '✕';
-    } else {
-      decisionOverlay.className = 'keep';
-      decisionIcon.textContent = '✓';
-    }
+    const action = dx < 0 ? 'delete' : 'keep';
+    decisionOverlay.className = action;
     decisionOverlay.style.opacity = String(ratio * 0.8);
+    decisionIcon.dataset.action = action;
+    decisionIcon.textContent = dx < 0 ? '✕' : '✓';
     if (ratio > 0.4) {
       decisionIcon.classList.add('show');
     } else {
@@ -562,14 +737,12 @@ document.getElementById('screen-swiper').addEventListener('touchend', (e) => {
   const dx = e.changedTouches[0].clientX - touchStartX;
 
   if (dragging && Math.abs(dx) > 50) {
-    // committed swipe
     decisionOverlay.style.opacity = '';
     if (dx < 0) decide('delete');
     else decide('keep');
     return;
   }
 
-  // snap back if partial drag
   if (dragging) {
     photoContainer.classList.add('animating');
     photoContainer.style.transform = '';
@@ -577,10 +750,9 @@ document.getElementById('screen-swiper').addEventListener('touchend', (e) => {
     decisionOverlay.className = '';
     decisionOverlay.style.opacity = '';
     decisionIcon.className = '';
+    delete decisionIcon.dataset.action;
     setTimeout(() => photoContainer.classList.remove('animating'), 290);
-    return;
   }
-
 }, { passive: true });
 
 // ── Keyboard (desktop testing) ─────────────────────────
@@ -591,7 +763,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'z') undo();
 });
 
-// ── Tap zones ───────────────────────────────────────────
 document.getElementById('btn-undo').addEventListener('click', undo);
 
 // ── Hint arrows ─────────────────────────────────────────
@@ -605,10 +776,11 @@ function showConfirm() {
   showScreen('confirm');
 
   const toDelete = photos.filter(p => p.decision === 'delete');
-  const total = photos.length;
+  const kept = photos.length - toDelete.length;
 
   confirmTitle.textContent = `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`;
-  confirmSub.textContent = `${total - toDelete.length} kept · ${toDelete.length} to delete`;
+  document.getElementById('stat-kept').textContent = kept;
+  document.getElementById('stat-del').textContent  = toDelete.length;
 
   thumbGrid.innerHTML = '';
   if (toDelete.length === 0) {
@@ -622,7 +794,11 @@ function showConfirm() {
       const img = document.createElement('img');
       img.src = p.url;
       img.alt = p.name;
+      const badge = document.createElement('div');
+      badge.className = 'thumb-badge';
+      badge.textContent = '✕';
       div.appendChild(img);
+      div.appendChild(badge);
       thumbGrid.appendChild(div);
     });
   }
@@ -670,6 +846,7 @@ btnRestart.addEventListener('click', () => {
   index = 0;
   showScreen('landing');
 });
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/photo-curator/sw.js');
 }
