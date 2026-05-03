@@ -750,7 +750,7 @@ function loadPhoto(i) {
   delete decisionIcon.dataset.action;
   swiperCounter.textContent = `${i + 1} / ${photos.length}`;
   progressFill.style.width = `${(i + 1) / photos.length * 100}%`;
-  btnUndo.style.display = i > 0 ? '' : 'none';
+  btnUndo.style.display = i > 0 ? 'block' : 'none';
 }
 
 function undo() {
