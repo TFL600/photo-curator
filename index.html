@@ -81,8 +81,22 @@
       text-align: center;
       max-width: 280px;
       line-height: 1.5;
-      margin-bottom: 48px;
+      margin-bottom: 24px;
     }
+
+    .landing-last {
+      font-size: 13px;
+      color: var(--text-light);
+      text-align: center;
+      max-width: 280px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+    .landing-last strong { color: var(--text); font-weight: 500; }
 
     .btn-primary {
       background: var(--text);
@@ -304,6 +318,7 @@
   <div class="landing-icon">📸</div>
   <h1 class="landing-title">Photo Curator</h1>
   <p class="landing-sub">Swipe left to delete, right to keep. Clean up your camera roll in seconds.</p>
+  <div class="landing-last" id="landing-last" style="display:none"></div>
   <button class="btn-primary" id="btn-select">Select Photos</button>
   <input type="file" id="file-input" accept="image/*" multiple>
 </div>
@@ -353,6 +368,18 @@
 let photos = [];   // { file, url, name, date, decision }
 let index = 0;
 let hintsShown = false;
+
+// ── Last session reminder ───────────────────────────────
+(function() {
+  const raw = localStorage.getItem('lastSwipe');
+  if (!raw) return;
+  try {
+    const { name, sessionDate } = JSON.parse(raw);
+    const el = document.getElementById('landing-last');
+    el.innerHTML = `Last session on <strong>${sessionDate}</strong> — stopped at <strong>${name}</strong>`;
+    el.style.display = '';
+  } catch(_) {}
+})();
 
 // ── Elements ───────────────────────────────────────────
 const screens = {
@@ -460,9 +487,18 @@ function undo() {
   loadPhoto(index);
 }
 
+function todayFormatted() {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function decide(action) {
   // action: 'keep' | 'delete'
   photos[index].decision = action;
+  localStorage.setItem('lastSwipe', JSON.stringify({ name: photos[index].name, sessionDate: todayFormatted() }));
 
   // flash icon
   decisionOverlay.className = action;
