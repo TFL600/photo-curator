@@ -237,6 +237,27 @@
       letter-spacing: 0.02em;
     }
 
+    #btn-stop {
+      position: absolute;
+      top: calc(12px + var(--safe-top));
+      right: 16px;
+      z-index: 40;
+      background: rgba(255,255,255,0.13);
+      color: rgba(255,255,255,0.88);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 9px 20px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      cursor: pointer;
+      min-height: 40px;
+      letter-spacing: 0.01em;
+    }
+    #btn-stop:active { opacity: 0.65; }
+
     #btn-undo {
       position: absolute;
       bottom: calc(20px + var(--safe-bottom));
@@ -551,6 +572,7 @@
 <div id="screen-swiper" class="screen">
   <div id="swiper-progress"><div id="swiper-progress-fill"></div></div>
   <div id="swiper-counter">1 / 1</div>
+  <button id="btn-stop" aria-label="Stop swiping">Done</button>
   <button id="btn-undo" aria-label="Undo">↩ Undo</button>
 
   <div id="photo-container">
@@ -847,6 +869,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.getElementById('btn-undo').addEventListener('click', undo);
+document.getElementById('btn-stop').addEventListener('click', showConfirm);
 
 // ── Hint arrows ─────────────────────────────────────────
 function showHints() {
