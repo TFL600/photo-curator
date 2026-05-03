@@ -102,29 +102,39 @@
 
     .landing-last {
       display: flex;
-      align-items: flex-start;
-      gap: 10px;
+      align-items: center;
+      gap: 12px;
       width: 100%;
       max-width: 300px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 13px 15px;
+      padding: 10px 14px 10px 10px;
       margin-bottom: 24px;
       box-shadow: var(--shadow-sm);
     }
-    .landing-last-icon {
-      font-size: 15px;
+    .landing-last-thumb {
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      object-fit: cover;
       flex-shrink: 0;
-      margin-top: 2px;
-      opacity: 0.7;
+      background: var(--border);
     }
-    .landing-last-text {
-      font-size: 13px;
+    .landing-last-info { flex: 1; min-width: 0; }
+    .landing-last-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
       color: var(--text-light);
-      line-height: 1.55;
+      margin-bottom: 3px;
     }
-    .landing-last-text strong { color: var(--text); font-weight: 500; }
+    .landing-last-date {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+    }
 
     .btn-primary {
       width: 100%;
@@ -481,8 +491,11 @@
   <h1 class="landing-title">Photo Curator</h1>
   <p class="landing-sub">Swipe left to delete, right to keep. Clean up your camera roll in seconds.</p>
   <div class="landing-last" id="landing-last" style="display:none">
-    <span class="landing-last-icon">🕐</span>
-    <span class="landing-last-text" id="landing-last-text"></span>
+    <img class="landing-last-thumb" id="landing-last-thumb" src="" alt="">
+    <div class="landing-last-info">
+      <div class="landing-last-label">Last session</div>
+      <div class="landing-last-date" id="landing-last-date"></div>
+    </div>
   </div>
   <button class="btn-primary" id="btn-select">Select Photos</button>
   <input type="file" id="file-input" accept="image/*" multiple>
@@ -554,11 +567,11 @@ let hintsShown = false;
   const raw = localStorage.getItem('lastSwipe');
   if (!raw) return;
   try {
-    const { name, sessionDate } = JSON.parse(raw);
-    const el = document.getElementById('landing-last');
-    document.getElementById('landing-last-text').innerHTML =
-      `Last session on <strong>${sessionDate}</strong> — stopped at <strong>${name}</strong>`;
-    el.style.display = '';
+    const { thumbnail, photoDate } = JSON.parse(raw);
+    if (!thumbnail || !photoDate) return;
+    document.getElementById('landing-last-thumb').src = thumbnail;
+    document.getElementById('landing-last-date').textContent = photoDate;
+    document.getElementById('landing-last').style.display = '';
   } catch(_) {}
 })();
 
@@ -675,9 +688,25 @@ function todayFormatted() {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function saveThumbnail(imgEl, photoDate) {
+  try {
+    const size = 80;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const min = Math.min(imgEl.naturalWidth, imgEl.naturalHeight);
+    const sx = (imgEl.naturalWidth - min) / 2;
+    const sy = (imgEl.naturalHeight - min) / 2;
+    ctx.drawImage(imgEl, sx, sy, min, min, 0, 0, size, size);
+    const thumbnail = canvas.toDataURL('image/jpeg', 0.65);
+    localStorage.setItem('lastSwipe', JSON.stringify({ thumbnail, photoDate }));
+  } catch(_) {}
+}
+
 function decide(action) {
   photos[index].decision = action;
-  localStorage.setItem('lastSwipe', JSON.stringify({ name: photos[index].name, sessionDate: todayFormatted() }));
+  saveThumbnail(photoImg, photos[index].date);
 
   decisionOverlay.className = action;
   decisionIcon.dataset.action = action;
