@@ -316,7 +316,7 @@
       transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.28s ease;
     }
 
-    #photo-img {
+    #photo-img, #photo-video {
       max-width: 100%;
       max-height: 100%;
       width: 100%;
@@ -327,6 +327,7 @@
       user-select: none;
       transition: transform 0.25s ease;
     }
+    #photo-video { display: none; background: #000; }
 
     #decision-overlay {
       position: absolute;
@@ -481,6 +482,17 @@
       align-items: center;
       justify-content: center;
     }
+    .thumb-video-badge {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      backdrop-filter: blur(4px);
+    }
 
     /* actions */
     .confirm-actions {
@@ -580,8 +592,8 @@
       <div class="landing-last-date" id="landing-last-date"></div>
     </div>
   </div>
-  <button class="btn-primary" id="btn-select">Select Photos</button>
-  <input type="file" id="file-input" accept="image/*" multiple>
+  <button class="btn-primary" id="btn-select">Select Photos &amp; Videos</button>
+  <input type="file" id="file-input" accept="image/*,video/*" multiple>
 </div>
 
 <!-- LOADING OVERLAY -->
@@ -600,6 +612,7 @@
 
   <div id="photo-container">
     <img id="photo-img" src="" alt="">
+    <video id="photo-video" autoplay loop muted playsinline></video>
     <div id="decision-overlay"></div>
     <div id="decision-icon"></div>
   </div>
@@ -677,6 +690,7 @@ const fileInput        = document.getElementById('file-input');
 const btnSelect        = document.getElementById('btn-select');
 const photoContainer   = document.getElementById('photo-container');
 const photoImg         = document.getElementById('photo-img');
+const photoVideo       = document.getElementById('photo-video');
 const decisionOverlay  = document.getElementById('decision-overlay');
 const decisionIcon     = document.getElementById('decision-icon');
 const swiperCounter    = document.getElementById('swiper-counter');
@@ -687,6 +701,10 @@ const confirmTitle     = document.getElementById('confirm-title');
 const thumbGrid        = document.getElementById('thumb-grid');
 const btnDelete        = document.getElementById('btn-delete');
 const btnRestart       = document.getElementById('btn-restart');
+
+function activeMedia() {
+  return photos[index]?.type === 'video' ? photoVideo : photoImg;
+}
 
 // ── Screen helpers ──────────────────────────────────────
 function showScreen(name) {
@@ -715,6 +733,30 @@ async function getPhotoDate(file) {
   return formatDate(new Date(file.lastModified));
 }
 
+// ── Video thumbnail ─────────────────────────────────────
+function getVideoThumb(url) {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.muted = true;
+    v.src = url;
+    v.currentTime = 0.5;
+    const done = () => {
+      try {
+        const size = 160;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const min = Math.min(v.videoWidth, v.videoHeight);
+        ctx.drawImage(v, (v.videoWidth-min)/2, (v.videoHeight-min)/2, min, min, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      } catch(_) { resolve(''); }
+    };
+    v.addEventListener('seeked', done, { once: true });
+    v.addEventListener('error',  () => resolve(''), { once: true });
+    v.load();
+  });
+}
+
 // ── File loading ────────────────────────────────────────
 btnSelect.addEventListener('click', () => fileInput.click());
 
@@ -729,18 +771,25 @@ fileInput.addEventListener('change', async () => {
   btnSelect.classList.add('loading');
   btnSelect.disabled = true;
   loadingOverlay.classList.add('active');
-  loadingLabel.textContent = `Loading ${files.length} photo${files.length !== 1 ? 's' : ''}…`;
+  loadingLabel.textContent = `Loading ${files.length} item${files.length !== 1 ? 's' : ''}…`;
 
   photos.forEach(p => URL.revokeObjectURL(p.url));
 
-  photos = await Promise.all(files.map(async (file) => ({
-    file,
-    url:      URL.createObjectURL(file),
-    name:     file.name.replace(/\.[^.]+$/, ''),
-    date:     await getPhotoDate(file),
-    decision: null,
-    rotation: 0,
-  })));
+  photos = await Promise.all(files.map(async (file) => {
+    const isVideo = file.type.startsWith('video/');
+    const url = URL.createObjectURL(file);
+    const date = isVideo ? formatDate(new Date(file.lastModified)) : await getPhotoDate(file);
+    const thumb = isVideo ? await getVideoThumb(url) : null;
+    return {
+      file, url,
+      name:     file.name.replace(/\.[^.]+$/, ''),
+      date,
+      decision: null,
+      rotation: 0,
+      type:     isVideo ? 'video' : 'image',
+      thumb,
+    };
+  }));
 
   photos.sort((a, b) => {
     const parse = d => { const [dd,mm,yyyy] = d.split('/'); return new Date(yyyy, mm-1, dd); };
@@ -766,42 +815,61 @@ const btnUndo = document.getElementById('btn-undo');
 // ── Zoom / pan state ────────────────────────────────────
 let zoom = 1, panX = 0, panY = 0;
 
-function applyImgTransform() {
+function applyMediaTransform() {
   const r = photos[index]?.rotation ?? 0;
-  photoImg.style.transform = [
+  const t = [
     (panX || panY) ? `translate(${panX}px,${panY}px)` : '',
     zoom !== 1     ? `scale(${zoom})` : '',
     r              ? `rotate(${r}deg)` : '',
   ].filter(Boolean).join(' ');
+  photoImg.style.transform   = t;
+  photoVideo.style.transform = t;
 }
 
 function resetZoom() {
   zoom = 1; panX = 0; panY = 0;
-  applyImgTransform();
+  applyMediaTransform();
 }
 
 function loadPhoto(i) {
   const p = photos[i];
-  photoImg.src = p.url;
-  photoImg.style.transition = 'none';
   zoom = 1; panX = 0; panY = 0;
-  applyImgTransform();
-  requestAnimationFrame(() => { photoImg.style.transition = ''; });
+
+  if (p.type === 'video') {
+    photoImg.style.display   = 'none';
+    photoVideo.style.display = '';
+    photoVideo.style.transition = 'none';
+    photoVideo.src = p.url;
+    photoVideo.play().catch(() => {});
+  } else {
+    photoVideo.pause();
+    photoVideo.src = '';
+    photoVideo.style.display = 'none';
+    photoImg.style.display   = '';
+    photoImg.style.transition = 'none';
+    photoImg.src = p.url;
+  }
+
+  applyMediaTransform();
+  requestAnimationFrame(() => {
+    photoImg.style.transition   = '';
+    photoVideo.style.transition = '';
+  });
   photoContainer.style.transform = '';
-  photoContainer.style.opacity = '';
+  photoContainer.style.opacity   = '';
   decisionOverlay.className = '';
-  decisionIcon.className = '';
-  decisionIcon.textContent = '';
+  decisionIcon.className    = '';
+  decisionIcon.textContent  = '';
   delete decisionIcon.dataset.action;
   swiperCounter.textContent = `${i + 1} / ${photos.length}`;
-  progressFill.style.width = `${(i + 1) / photos.length * 100}%`;
-  btnUndo.style.display = i > 0 ? 'block' : 'none';
+  progressFill.style.width  = `${(i + 1) / photos.length * 100}%`;
+  btnUndo.style.display     = i > 0 ? 'block' : 'none';
 }
 
 document.getElementById('btn-rotate').addEventListener('click', () => {
   if (!photos.length) return;
   photos[index].rotation = (photos[index].rotation + 90) % 360;
-  applyImgTransform();
+  applyMediaTransform();
 });
 
 function undo() {
@@ -820,17 +888,16 @@ function todayFormatted() {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-function saveThumbnail(imgEl, photoDate) {
+function saveThumbnail(mediaEl, photoDate) {
   try {
     const size = 80;
     const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = size; canvas.height = size;
     const ctx = canvas.getContext('2d');
-    const min = Math.min(imgEl.naturalWidth, imgEl.naturalHeight);
-    const sx = (imgEl.naturalWidth - min) / 2;
-    const sy = (imgEl.naturalHeight - min) / 2;
-    ctx.drawImage(imgEl, sx, sy, min, min, 0, 0, size, size);
+    const w = mediaEl.naturalWidth  || mediaEl.videoWidth  || 1;
+    const h = mediaEl.naturalHeight || mediaEl.videoHeight || 1;
+    const min = Math.min(w, h);
+    ctx.drawImage(mediaEl, (w-min)/2, (h-min)/2, min, min, 0, 0, size, size);
     const thumbnail = canvas.toDataURL('image/jpeg', 0.65);
     localStorage.setItem('lastSwipe', JSON.stringify({ thumbnail, photoDate }));
   } catch(_) {}
@@ -838,7 +905,7 @@ function saveThumbnail(imgEl, photoDate) {
 
 function decide(action) {
   photos[index].decision = action;
-  saveThumbnail(photoImg, photos[index].date);
+  saveThumbnail(activeMedia(), photos[index].date);
 
   decisionOverlay.className = action;
   decisionIcon.dataset.action = action;
@@ -897,14 +964,14 @@ swiper.addEventListener('touchmove', (e) => {
   if (e.touches.length === 2 && pinching) {
     const dist = pinchDist(e.touches);
     zoom = Math.min(5, Math.max(1, pinchStartZoom * dist / pinchStartDist));
-    applyImgTransform();
+    applyMediaTransform();
     return;
   }
   if (zoom > 1) {
     // pan mode
     panX = panStartOffsetX + (e.touches[0].clientX - panStartX);
     panY = panStartOffsetY + (e.touches[0].clientY - panStartY);
-    applyImgTransform();
+    applyMediaTransform();
     return;
   }
   // swipe mode
@@ -998,13 +1065,19 @@ function showConfirm() {
       const div = document.createElement('div');
       div.className = 'thumb-item';
       const img = document.createElement('img');
-      img.src = p.url;
+      img.src = p.type === 'video' ? p.thumb : p.url;
       img.alt = p.name;
       const badge = document.createElement('div');
       badge.className = 'thumb-badge';
       badge.textContent = '✕';
       div.appendChild(img);
       div.appendChild(badge);
+      if (p.type === 'video') {
+        const vbadge = document.createElement('div');
+        vbadge.className = 'thumb-video-badge';
+        vbadge.textContent = '▶';
+        div.appendChild(vbadge);
+      }
       thumbGrid.appendChild(div);
     });
   }
