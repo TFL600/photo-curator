@@ -153,6 +153,46 @@
       box-shadow: var(--shadow-md);
     }
     .btn-primary:active { transform: scale(0.97); opacity: 0.9; }
+    .btn-primary.loading { opacity: 0.75; cursor: default; display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    #loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(247,244,240,0.85);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    #loading-overlay.active { display: flex; }
+    .loading-spinner-lg {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(30,27,23,0.12);
+      border-top-color: var(--text);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    .loading-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-light);
+    }
 
     #file-input { display: none; }
 
@@ -501,6 +541,12 @@
   <input type="file" id="file-input" accept="image/*" multiple>
 </div>
 
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay">
+  <div class="loading-spinner-lg"></div>
+  <div class="loading-label" id="loading-label">Loading photos…</div>
+</div>
+
 <!-- SWIPER -->
 <div id="screen-swiper" class="screen">
   <div id="swiper-progress"><div id="swiper-progress-fill"></div></div>
@@ -631,8 +677,14 @@ fileInput.addEventListener('change', async () => {
   const files = Array.from(fileInput.files);
   if (!files.length) return;
 
-  btnSelect.textContent = 'Loading…';
+  const loadingOverlay = document.getElementById('loading-overlay');
+  const loadingLabel   = document.getElementById('loading-label');
+
+  btnSelect.innerHTML = '<span class="spinner"></span>Loading…';
+  btnSelect.classList.add('loading');
   btnSelect.disabled = true;
+  loadingOverlay.classList.add('active');
+  loadingLabel.textContent = `Loading ${files.length} photo${files.length !== 1 ? 's' : ''}…`;
 
   photos.forEach(p => URL.revokeObjectURL(p.url));
 
@@ -644,7 +696,9 @@ fileInput.addEventListener('change', async () => {
     decision: null,
   })));
 
-  btnSelect.textContent = 'Select Photos';
+  loadingOverlay.classList.remove('active');
+  btnSelect.innerHTML = 'Select Photos';
+  btnSelect.classList.remove('loading');
   btnSelect.disabled = false;
   fileInput.value = '';
 
