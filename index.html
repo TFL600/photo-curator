@@ -718,6 +718,11 @@ fileInput.addEventListener('change', async () => {
     decision: null,
   })));
 
+  photos.sort((a, b) => {
+    const parse = d => { const [dd,mm,yyyy] = d.split('/'); return new Date(yyyy, mm-1, dd); };
+    return parse(a.date) - parse(b.date);
+  });
+
   loadingOverlay.classList.remove('active');
   btnSelect.innerHTML = 'Select Photos';
   btnSelect.classList.remove('loading');
