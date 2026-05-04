@@ -817,49 +817,46 @@ fileInput.addEventListener('change', async () => {
   const files = Array.from(fileInput.files);
   if (!files.length) return;
 
-  const loadingOverlay = document.getElementById('loading-overlay');
-  const loadingLabel   = document.getElementById('loading-label');
-
   btnSelect.innerHTML = '<span class="spinner"></span>Loading…';
   btnSelect.classList.add('loading');
   btnSelect.disabled = true;
-  loadingOverlay.classList.add('active');
-  loadingLabel.textContent = `Loading ${files.length} item${files.length !== 1 ? 's' : ''}…`;
 
   photos.forEach(p => URL.revokeObjectURL(p.url));
+  photos = [];
+  index = 0;
+  hintsShown = false;
+  fileInput.value = '';
 
-  photos = await Promise.all(files.map(async (file) => {
+  async function processFile(file) {
     const isVideo = file.type.startsWith('video/');
     const url = URL.createObjectURL(file);
     const date = isVideo ? formatDate(new Date(file.lastModified)) : await getPhotoDate(file);
-    return {
-      file, url,
-      name:     file.name.replace(/\.[^.]+$/, ''),
-      date,
-      decision: null,
-      rotation: 0,
-      type:     isVideo ? 'video' : 'image',
-      thumb:    null,
-    };
-  }));
+    return { file, url, name: file.name.replace(/\.[^.]+$/, ''), date, decision: null, rotation: 0, type: isVideo ? 'video' : 'image', thumb: null };
+  }
 
-  photos.sort((a, b) => {
-    const parse = d => { const [dd,mm,yyyy] = d.split('/'); return new Date(yyyy, mm-1, dd); };
-    return parse(a.date) - parse(b.date);
-  });
+  let swiperLaunched = false;
 
-  loadingOverlay.classList.remove('active');
-  btnSelect.innerHTML = 'Select Photos';
-  btnSelect.classList.remove('loading');
-  btnSelect.disabled = false;
-  fileInput.value = '';
-
-  index = 0;
-  hintsShown = false;
-  showScreen('swiper');
-  populateThumbStrip();
-  loadPhoto(index);
-  showHints();
+  for (const file of files) {
+    const entry = await processFile(file);
+    photos.push(entry);
+    photos.sort((a, b) => {
+      const parse = d => { const [dd,mm,yyyy] = d.split('/'); return new Date(yyyy, mm-1, dd); };
+      return parse(a.date) - parse(b.date);
+    });
+    if (!swiperLaunched) {
+      swiperLaunched = true;
+      btnSelect.innerHTML = 'Select Photos';
+      btnSelect.classList.remove('loading');
+      btnSelect.disabled = false;
+      showScreen('swiper');
+      populateThumbStrip();
+      loadPhoto(0);
+      showHints();
+    } else {
+      populateThumbStrip();
+      updateThumbStrip(index);
+    }
+  }
 });
 
 // ── Thumb strip ─────────────────────────────────────────
