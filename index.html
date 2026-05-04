@@ -911,6 +911,22 @@ function resetZoom() {
   applyMediaTransform();
 }
 
+let preloadImg = new Image();
+let preloadVideo = document.createElement('video');
+preloadVideo.muted = true;
+preloadVideo.preload = 'auto';
+
+function preloadNext(i) {
+  const next = photos[i + 1];
+  if (!next) return;
+  if (next.type === 'video') {
+    preloadVideo.src = next.url;
+    preloadVideo.load();
+  } else {
+    preloadImg.src = next.url;
+  }
+}
+
 function loadPhoto(i) {
   const p = photos[i];
   zoom = 1; panX = 0; panY = 0;
@@ -945,6 +961,7 @@ function loadPhoto(i) {
   progressFill.style.width  = `${(i + 1) / photos.length * 100}%`;
   btnUndo.style.display     = i > 0 ? 'block' : 'none';
   updateThumbStrip(i);
+  preloadNext(i);
 }
 
 document.getElementById('btn-rotate').addEventListener('click', () => {
