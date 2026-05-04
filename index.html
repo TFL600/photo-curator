@@ -618,6 +618,54 @@
       object-fit: cover;
       display: block;
     }
+
+    /* ── END OF STACK ── */
+    #end-of-stack {
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      background: #0a0a0a;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 40px 32px;
+      padding-top: calc(40px + var(--safe-top));
+      padding-bottom: calc(40px + var(--safe-bottom));
+      text-align: center;
+    }
+    #end-of-stack.active { display: flex; }
+    #end-of-stack h2 {
+      font-family: 'Fraunces', serif;
+      font-size: 32px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    #end-of-stack p {
+      font-size: 15px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.55;
+      max-width: 280px;
+      margin-bottom: 18px;
+    }
+    .btn-eos {
+      width: 100%;
+      max-width: 320px;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 17px;
+      font-weight: 500;
+      padding: 17px 24px;
+      cursor: pointer;
+      min-height: 56px;
+      transition: opacity 0.12s, transform 0.12s;
+    }
+    .btn-eos:active { opacity: 0.8; transform: scale(0.97); }
+    .btn-eos-primary { background: #fff; color: #0a0a0a; }
+    .btn-eos-secondary { background: rgba(255,255,255,0.13); color: rgba(255,255,255,0.88); }
   </style>
 </head>
 <body>
@@ -672,6 +720,13 @@
   </div>
 
   <div id="thumb-strip"></div>
+
+  <div id="end-of-stack">
+    <h2>End of stack</h2>
+    <p id="eos-message">You've reached the end, but some photos haven't been sorted yet.</p>
+    <button class="btn-eos btn-eos-primary" id="btn-show-unsorted">👁 Show unsorted</button>
+    <button class="btn-eos btn-eos-secondary" id="btn-eos-done">✓ Done</button>
+  </div>
 </div>
 
 <!-- CONFIRM -->
@@ -1044,7 +1099,12 @@ function decide(action) {
     if (index < photos.length) {
       loadPhoto(index);
     } else {
-      showConfirm();
+      const unsorted = photos.filter(p => p.decision === null);
+      if (unsorted.length > 0) {
+        showEndOfStack(unsorted.length);
+      } else {
+        showConfirm();
+      }
     }
   }, 290);
 }
@@ -1161,6 +1221,31 @@ document.addEventListener('keydown', (e) => {
 document.getElementById('btn-undo').addEventListener('click', undo);
 document.getElementById('btn-stop').addEventListener('click', showConfirm);
 
+// ── End of stack ────────────────────────────────────────
+const endOfStack = document.getElementById('end-of-stack');
+
+function showEndOfStack(unsortedCount) {
+  const n = unsortedCount;
+  document.getElementById('eos-message').textContent =
+    `You've reached the end, but ${n} photo${n !== 1 ? 's' : ''} haven't been sorted yet.`;
+  endOfStack.classList.add('active');
+}
+
+function hideEndOfStack() {
+  endOfStack.classList.remove('active');
+}
+
+document.getElementById('btn-show-unsorted').addEventListener('click', () => {
+  hideEndOfStack();
+  const i = photos.findIndex(p => p.decision === null);
+  if (i !== -1) navigateTo(i);
+});
+
+document.getElementById('btn-eos-done').addEventListener('click', () => {
+  hideEndOfStack();
+  showConfirm();
+});
+
 // ── Hint arrows ─────────────────────────────────────────
 function showHints() {
   hintLeft.classList.add('visible');
@@ -1242,6 +1327,7 @@ btnCopy.addEventListener('click', () => {
 document.getElementById('btn-reswipe').addEventListener('click', () => {
   photos.forEach(p => { p.decision = null; });
   index = 0;
+  hideEndOfStack();
   showScreen('swiper');
   populateThumbStrip();
   loadPhoto(0);
