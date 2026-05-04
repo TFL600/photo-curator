@@ -767,6 +767,8 @@
 let photos = [];   // { file, url, name, date, decision }
 let index = 0;
 let hintsShown = false;
+let decisionStack = []; // indices of decided photos in order (for undo)
+const stripThumbs = []; // DOM refs indexed by photo index
 
 // ── Last session reminder ───────────────────────────────
 (function() {
@@ -882,6 +884,8 @@ fileInput.addEventListener('change', async () => {
   photos = [];
   index = 0;
   hintsShown = false;
+  decisionStack = [];
+  stripThumbs.length = 0;
   fileInput.value = '';
 
   async function processFile(file) {
@@ -910,30 +914,28 @@ const thumbStrip = document.getElementById('thumb-strip');
 
 function populateThumbStrip() {
   thumbStrip.innerHTML = '';
+  stripThumbs.length = 0;
   photos.forEach((p, i) => {
     const div = document.createElement('div');
-    div.className = 'strip-thumb' + (i === 0 ? ' active' : '');
+    div.className = 'strip-thumb';
     const img = document.createElement('img');
     img.alt = '';
     if (p.type === 'video') {
-      if (p.thumb) {
-        img.src = p.thumb;
-      } else {
-        getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; });
-      }
+      if (p.thumb) { img.src = p.thumb; }
+      else { getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; }); }
     } else {
       img.src = p.url;
     }
     div.appendChild(img);
     div.addEventListener('click', () => navigateTo(i));
     thumbStrip.appendChild(div);
+    stripThumbs[i] = div;
   });
 }
 
 function updateThumbStrip(i) {
-  const thumbs = thumbStrip.querySelectorAll('.strip-thumb');
-  thumbs.forEach((t, ti) => t.classList.toggle('active', ti === i));
-  if (thumbs[i]) thumbs[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  stripThumbs.forEach((t, ti) => { if (t) t.classList.toggle('active', ti === i); });
+  if (stripThumbs[i]) stripThumbs[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 }
 
 // ── Swiper ──────────────────────────────────────────────
@@ -963,9 +965,24 @@ let preloadVideo = document.createElement('video');
 preloadVideo.muted = true;
 preloadVideo.preload = 'auto';
 
+function findNext(from) {
+  for (let i = from + 1; i < photos.length; i++) {
+    if (photos[i].decision === null) return i;
+  }
+  return -1;
+}
+
+function findPrev(from) {
+  for (let i = from - 1; i >= 0; i--) {
+    if (photos[i].decision === null) return i;
+  }
+  return -1;
+}
+
 function preloadNext(i) {
-  const next = photos[i + 1];
-  if (!next) return;
+  const ni = findNext(i);
+  if (ni === -1) return;
+  const next = photos[ni];
   if (next.type === 'video') {
     preloadVideo.src = next.url;
     preloadVideo.load();
@@ -1006,7 +1023,7 @@ function loadPhoto(i) {
   delete decisionIcon.dataset.action;
   swiperCounter.textContent = `${i + 1} / ${photos.length}`;
   progressFill.style.width  = `${(i + 1) / photos.length * 100}%`;
-  btnUndo.style.display     = i > 0 ? 'block' : 'none';
+  btnUndo.style.display     = decisionStack.length > 0 ? 'block' : 'none';
   updateThumbStrip(i);
   preloadNext(i);
 }
@@ -1025,9 +1042,12 @@ function navigateTo(i) {
 }
 
 function undo() {
-  if (index === 0) return;
-  index--;
-  photos[index].decision = null;
+  if (decisionStack.length === 0) return;
+  hideEndOfStack();
+  const lastDecided = decisionStack.pop();
+  photos[lastDecided].decision = null;
+  if (stripThumbs[lastDecided]) stripThumbs[lastDecided].style.display = '';
+  index = lastDecided;
   photoContainer.classList.remove('animating');
   loadPhoto(index);
 }
@@ -1081,7 +1101,10 @@ async function saveSessionData() {
 }
 
 function decide(action) {
-  photos[index].decision = action;
+  const decidedIndex = index;
+  photos[decidedIndex].decision = action;
+  decisionStack.push(decidedIndex);
+  if (stripThumbs[decidedIndex]) stripThumbs[decidedIndex].style.display = 'none';
 
   decisionOverlay.className = action;
   decisionIcon.dataset.action = action;
@@ -1095,14 +1118,17 @@ function decide(action) {
 
   setTimeout(() => {
     photoContainer.classList.remove('animating');
-    index++;
-    if (index < photos.length) {
+    const next = findNext(decidedIndex);
+    if (next !== -1) {
+      index = next;
       loadPhoto(index);
     } else {
       const unsorted = photos.filter(p => p.decision === null);
       if (unsorted.length > 0) {
+        index = photos.length;
         showEndOfStack(unsorted.length);
       } else {
+        index = photos.length;
         showConfirm();
       }
     }
@@ -1184,8 +1210,8 @@ swiper.addEventListener('touchend', (e) => {
     const stripTop = thumbStrip.getBoundingClientRect().top;
     if (touch.clientY >= stripTop) return; // tap in thumb strip — handled by click
     const W = window.innerWidth;
-    if (touch.clientX < W / 3) navigateTo(index - 1);
-    else if (touch.clientX > W * 2 / 3) navigateTo(index + 1);
+    if (touch.clientX < W / 3) { const p = findPrev(index); if (p !== -1) navigateTo(p); }
+    else if (touch.clientX > W * 2 / 3) { const n = findNext(index); if (n !== -1) navigateTo(n); }
     return;
   }
 
@@ -1327,6 +1353,7 @@ btnCopy.addEventListener('click', () => {
 document.getElementById('btn-reswipe').addEventListener('click', () => {
   photos.forEach(p => { p.decision = null; });
   index = 0;
+  decisionStack = [];
   hideEndOfStack();
   showScreen('swiper');
   populateThumbStrip();
