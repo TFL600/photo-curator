@@ -101,39 +101,40 @@
     }
 
     .landing-last {
-      display: flex;
-      align-items: center;
-      gap: 12px;
       width: 100%;
       max-width: 300px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 10px 14px 10px 10px;
+      padding: 14px 14px 12px;
       margin-bottom: 24px;
       box-shadow: var(--shadow-sm);
     }
-    .landing-last-thumb {
-      width: 56px;
-      height: 56px;
-      border-radius: 10px;
-      object-fit: cover;
-      flex-shrink: 0;
-      background: var(--border);
-    }
-    .landing-last-info { flex: 1; min-width: 0; }
     .landing-last-label {
       font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--text-light);
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
-    .landing-last-date {
-      font-size: 15px;
-      font-weight: 500;
+    .landing-last-month {
+      font-family: 'Fraunces', serif;
+      font-size: 20px;
+      font-weight: 600;
       color: var(--text);
+      margin-bottom: 10px;
+    }
+    .landing-last-thumbs {
+      display: flex;
+      gap: 6px;
+    }
+    .landing-last-thumbs img {
+      width: 72px;
+      height: 72px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--border);
     }
 
     .btn-primary {
@@ -586,11 +587,9 @@
   <h1 class="landing-title">Photo Curator</h1>
   <p class="landing-sub">Swipe left to delete, right to keep. Clean up your camera roll in seconds.</p>
   <div class="landing-last" id="landing-last" style="display:none">
-    <img class="landing-last-thumb" id="landing-last-thumb" src="" alt="">
-    <div class="landing-last-info">
-      <div class="landing-last-label">Last session</div>
-      <div class="landing-last-date" id="landing-last-date"></div>
-    </div>
+    <div class="landing-last-label">Last sorted</div>
+    <div class="landing-last-month" id="landing-last-month"></div>
+    <div class="landing-last-thumbs" id="landing-last-thumbs"></div>
   </div>
   <button class="btn-primary" id="btn-select">Select Photos &amp; Videos</button>
   <input type="file" id="file-input" accept="image/*,video/*" multiple>
@@ -668,13 +667,20 @@ let hintsShown = false;
 
 // ── Last session reminder ───────────────────────────────
 (function() {
-  const raw = localStorage.getItem('lastSwipe');
+  const raw = localStorage.getItem('lastSession');
   if (!raw) return;
   try {
-    const { thumbnail, photoDate } = JSON.parse(raw);
-    if (!thumbnail || !photoDate) return;
-    document.getElementById('landing-last-thumb').src = thumbnail;
-    document.getElementById('landing-last-date').textContent = photoDate;
+    const { monthLabel, thumbnails } = JSON.parse(raw);
+    if (!monthLabel) return;
+    document.getElementById('landing-last-month').textContent = monthLabel;
+    const thumbsEl = document.getElementById('landing-last-thumbs');
+    (thumbnails || []).forEach(src => {
+      if (!src) return;
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = '';
+      thumbsEl.appendChild(img);
+    });
     document.getElementById('landing-last').style.display = '';
   } catch(_) {}
 })();
@@ -888,24 +894,48 @@ function todayFormatted() {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-function saveThumbnail(mediaEl, photoDate) {
+function getMonthLabel() {
+  if (!photos.length) return '';
+  const counts = {};
+  photos.forEach(p => {
+    const [, mm, yyyy] = p.date.split('/');
+    const key = `${yyyy}-${mm}`;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const [yyyy, mm] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0].split('-');
+  return new Date(+yyyy, +mm - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+async function saveSessionData() {
+  const monthLabel = getMonthLabel();
+  if (!monthLabel) return;
+  const kept = photos.filter(p => p.decision === 'keep').slice(0, 3);
+  const thumbnails = await Promise.all(kept.map(p => {
+    if (p.type === 'video') return Promise.resolve(p.thumb || '');
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const size = 80;
+          const canvas = document.createElement('canvas');
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          const min = Math.min(img.naturalWidth, img.naturalHeight);
+          ctx.drawImage(img, (img.naturalWidth - min) / 2, (img.naturalHeight - min) / 2, min, min, 0, 0, size, size);
+          resolve(canvas.toDataURL('image/jpeg', 0.65));
+        } catch (_) { resolve(''); }
+      };
+      img.onerror = () => resolve('');
+      img.src = p.url;
+    });
+  }));
   try {
-    const size = 80;
-    const canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    const w = mediaEl.naturalWidth  || mediaEl.videoWidth  || 1;
-    const h = mediaEl.naturalHeight || mediaEl.videoHeight || 1;
-    const min = Math.min(w, h);
-    ctx.drawImage(mediaEl, (w-min)/2, (h-min)/2, min, min, 0, 0, size, size);
-    const thumbnail = canvas.toDataURL('image/jpeg', 0.65);
-    localStorage.setItem('lastSwipe', JSON.stringify({ thumbnail, photoDate }));
-  } catch(_) {}
+    localStorage.setItem('lastSession', JSON.stringify({ monthLabel, thumbnails: thumbnails.filter(Boolean) }));
+  } catch (_) {}
 }
 
 function decide(action) {
   photos[index].decision = action;
-  saveThumbnail(activeMedia(), photos[index].date);
 
   decisionOverlay.className = action;
   decisionIcon.dataset.action = action;
@@ -1047,6 +1077,7 @@ function showHints() {
 // ── Confirm screen ──────────────────────────────────────
 function showConfirm() {
   showScreen('confirm');
+  saveSessionData();
 
   const toDelete = photos.filter(p => p.decision === 'delete');
   const kept = photos.length - toDelete.length;
