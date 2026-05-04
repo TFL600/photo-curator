@@ -913,10 +913,10 @@ function loadPhoto(i) {
 
   if (p.type === 'video') {
     photoImg.style.display   = 'none';
-    photoVideo.style.display = '';
+    photoVideo.style.display = 'block';
     photoVideo.style.transition = 'none';
     photoVideo.src = p.url;
-    photoVideo.play().catch(() => {});
+    photoVideo.addEventListener('canplay', () => photoVideo.play().catch(() => {}), { once: true });
   } else {
     photoVideo.pause();
     photoVideo.src = '';
