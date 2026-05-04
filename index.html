@@ -832,7 +832,6 @@ fileInput.addEventListener('change', async () => {
     const isVideo = file.type.startsWith('video/');
     const url = URL.createObjectURL(file);
     const date = isVideo ? formatDate(new Date(file.lastModified)) : await getPhotoDate(file);
-    const thumb = isVideo ? await getVideoThumb(url) : null;
     return {
       file, url,
       name:     file.name.replace(/\.[^.]+$/, ''),
@@ -840,7 +839,7 @@ fileInput.addEventListener('change', async () => {
       decision: null,
       rotation: 0,
       type:     isVideo ? 'video' : 'image',
-      thumb,
+      thumb:    null,
     };
   }));
 
@@ -872,8 +871,16 @@ function populateThumbStrip() {
     const div = document.createElement('div');
     div.className = 'strip-thumb' + (i === 0 ? ' active' : '');
     const img = document.createElement('img');
-    img.src = p.type === 'video' ? (p.thumb || '') : p.url;
     img.alt = '';
+    if (p.type === 'video') {
+      if (p.thumb) {
+        img.src = p.thumb;
+      } else {
+        getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; });
+      }
+    } else {
+      img.src = p.url;
+    }
     div.appendChild(img);
     thumbStrip.appendChild(div);
   });
@@ -982,7 +989,7 @@ async function saveSessionData() {
   if (!monthLabel) return;
   const kept = photos.filter(p => p.decision === 'keep').slice(0, 3);
   const thumbnails = await Promise.all(kept.map(p => {
-    if (p.type === 'video') return Promise.resolve(p.thumb || '');
+    if (p.type === 'video') return p.thumb ? Promise.resolve(p.thumb) : getVideoThumb(p.url).then(t => { p.thumb = t; return t; });
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
@@ -1167,8 +1174,13 @@ function showConfirm() {
       const div = document.createElement('div');
       div.className = 'thumb-item';
       const img = document.createElement('img');
-      img.src = p.type === 'video' ? p.thumb : p.url;
       img.alt = p.name;
+      if (p.type === 'video') {
+        if (p.thumb) { img.src = p.thumb; }
+        else { getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; }); }
+      } else {
+        img.src = p.url;
+      }
       const badge = document.createElement('div');
       badge.className = 'thumb-badge';
       badge.textContent = '✕';
