@@ -834,29 +834,18 @@ fileInput.addEventListener('change', async () => {
     return { file, url, name: file.name.replace(/\.[^.]+$/, ''), date, decision: null, rotation: 0, type: isVideo ? 'video' : 'image', thumb: null };
   }
 
-  let swiperLaunched = false;
+  const entries = await Promise.all(files.map(f => processFile(f)));
+  const parse = d => { const [dd,mm,yyyy] = d.split('/'); return new Date(yyyy, mm-1, dd); };
+  entries.sort((a, b) => parse(a.date) - parse(b.date));
+  photos.push(...entries);
 
-  for (const file of files) {
-    const entry = await processFile(file);
-    photos.push(entry);
-    photos.sort((a, b) => {
-      const parse = d => { const [dd,mm,yyyy] = d.split('/'); return new Date(yyyy, mm-1, dd); };
-      return parse(a.date) - parse(b.date);
-    });
-    if (!swiperLaunched) {
-      swiperLaunched = true;
-      btnSelect.innerHTML = 'Select Photos';
-      btnSelect.classList.remove('loading');
-      btnSelect.disabled = false;
-      showScreen('swiper');
-      populateThumbStrip();
-      loadPhoto(0);
-      showHints();
-    } else {
-      populateThumbStrip();
-      updateThumbStrip(index);
-    }
-  }
+  btnSelect.innerHTML = 'Select Photos';
+  btnSelect.classList.remove('loading');
+  btnSelect.disabled = false;
+  showScreen('swiper');
+  populateThumbStrip();
+  loadPhoto(0);
+  showHints();
 });
 
 // ── Thumb strip ─────────────────────────────────────────
