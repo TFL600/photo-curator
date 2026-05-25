@@ -27,6 +27,8 @@
       --radius-lg: 16px;
       --shadow-sm: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
       --shadow-md: 0 4px 16px rgba(0,0,0,0.11), 0 2px 4px rgba(0,0,0,0.06);
+      --album: #4a6fa5;
+      --album-bg: rgba(74, 111, 165, 0.88);
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --safe-left: env(safe-area-inset-left, 0px);
@@ -97,7 +99,32 @@
       text-align: center;
       max-width: 260px;
       line-height: 1.6;
-      margin-bottom: 28px;
+      margin-bottom: 16px;
+    }
+
+    .landing-hints {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 24px;
+      opacity: 0.65;
+    }
+    .landing-hint-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .landing-hint-arrow {
+      font-size: 17px;
+      color: var(--text-light);
+      line-height: 1;
+    }
+    .landing-hint-text {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-light);
     }
 
     .landing-last {
@@ -345,6 +372,7 @@
     }
     #decision-overlay.keep   { background: linear-gradient(120deg, rgba(45,106,79,0.55), rgba(45,106,79,0.18)); opacity: 1; }
     #decision-overlay.delete { background: linear-gradient(240deg, rgba(184,50,50,0.55), rgba(184,50,50,0.18)); opacity: 1; }
+    #decision-overlay.album  { background: linear-gradient(0deg, rgba(74,111,165,0.55), rgba(74,111,165,0.18)); opacity: 1; }
 
     #decision-icon {
       position: absolute;
@@ -366,6 +394,7 @@
     #decision-icon.show { transform: translate(-50%, -50%) scale(1); }
     #decision-icon[data-action="keep"]   { background: var(--keep-bg);   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
     #decision-icon[data-action="delete"] { background: var(--delete-bg); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    #decision-icon[data-action="album"]  { background: var(--album-bg);  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 
     /* hints */
     .hint {
@@ -381,6 +410,13 @@
     }
     #hint-left  { left: 22px; align-items: flex-start; }
     #hint-right { right: 22px; align-items: flex-end; }
+    #hint-up {
+      bottom: auto;
+      top: calc(60px + var(--safe-top));
+      left: 50%;
+      transform: translateX(-50%);
+      align-items: center;
+    }
     .hint-arrow {
       font-size: 22px;
       color: #fff;
@@ -394,6 +430,82 @@
       text-shadow: 0 1px 4px rgba(0,0,0,0.65);
       text-transform: uppercase;
       letter-spacing: 0.08em;
+    }
+
+    /* ── VIDEO CONTROLS ── */
+    #video-controls {
+      position: absolute;
+      bottom: calc(76px + var(--safe-bottom) + 10px);
+      left: 10px;
+      right: 10px;
+      z-index: 25;
+      display: none;
+    }
+    #video-progress-wrap {
+      height: 4px;
+      background: rgba(255,255,255,0.22);
+      border-radius: 2px;
+      margin-bottom: 10px;
+      position: relative;
+      touch-action: none;
+    }
+    #video-progress-bar {
+      height: 100%;
+      background: rgba(255,255,255,0.85);
+      border-radius: 2px;
+      width: 0%;
+      pointer-events: none;
+      transition: width 0.1s linear;
+    }
+    #video-bottom-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #btn-mute {
+      background: rgba(255,255,255,0.13);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      color: rgba(255,255,255,0.88);
+      font-size: 16px;
+      line-height: 1;
+      padding: 6px 10px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      flex-shrink: 0;
+      min-width: 36px;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #btn-mute:active { opacity: 0.65; }
+    #video-speed-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.3);
+      outline: none;
+      cursor: pointer;
+    }
+    #video-speed-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+    }
+    #video-speed-label {
+      color: rgba(255,255,255,0.72);
+      font-size: 12px;
+      font-weight: 600;
+      min-width: 26px;
+      text-align: right;
+      flex-shrink: 0;
     }
 
     /* ── CONFIRM ── */
@@ -435,6 +547,10 @@
       border-color: rgba(184,50,50,0.22);
       background: rgba(184,50,50,0.04);
     }
+    .stat-tile.stat-album-tile {
+      border-color: rgba(74,111,165,0.22);
+      background: rgba(74,111,165,0.04);
+    }
     .stat-num {
       display: block;
       font-family: 'Fraunces', serif;
@@ -444,7 +560,8 @@
       margin-bottom: 4px;
     }
     .stat-tile.stat-delete-tile .stat-num { color: var(--delete); }
-    .stat-tile:not(.stat-delete-tile) .stat-num { color: var(--keep); }
+    .stat-tile.stat-album-tile .stat-num { color: var(--album); }
+    .stat-tile:not(.stat-delete-tile):not(.stat-album-tile) .stat-num { color: var(--keep); }
     .stat-label-sm {
       font-size: 11px;
       font-weight: 600;
@@ -578,6 +695,32 @@
       font-size: 15px;
     }
 
+    .section-title {
+      font-family: 'Fraunces', serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .btn-album-shortcut {
+      background: var(--album);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-lg);
+      font-family: 'Outfit', sans-serif;
+      font-size: 17px;
+      font-weight: 500;
+      padding: 17px 24px;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.1s;
+      min-height: 56px;
+      text-align: center;
+      box-shadow: 0 4px 14px rgba(74,111,165,0.28);
+      width: 100%;
+    }
+    .btn-album-shortcut:active { transform: scale(0.98); opacity: 0.9; }
+
     /* ── THUMB STRIP ── */
     #thumb-strip {
       position: absolute;
@@ -679,7 +822,21 @@
     </svg>
   </div>
   <h1 class="landing-title">Photo Curator</h1>
-  <p class="landing-sub">Swipe left to delete, right to keep. Clean up your camera roll in seconds.</p>
+  <p class="landing-sub">Swipe to sort your camera roll in seconds.</p>
+  <div class="landing-hints">
+    <div class="landing-hint-item">
+      <span class="landing-hint-arrow">←</span>
+      <span class="landing-hint-text">Delete</span>
+    </div>
+    <div class="landing-hint-item">
+      <span class="landing-hint-arrow">↑</span>
+      <span class="landing-hint-text">Album</span>
+    </div>
+    <div class="landing-hint-item">
+      <span class="landing-hint-arrow">→</span>
+      <span class="landing-hint-text">Keep</span>
+    </div>
+  </div>
   <div class="landing-last" id="landing-last" style="display:none">
     <div class="landing-last-label">Last sorted</div>
     <div class="landing-last-month" id="landing-last-month"></div>
@@ -705,7 +862,7 @@
 
   <div id="photo-container">
     <img id="photo-img" src="" alt="">
-    <video id="photo-video" autoplay loop muted playsinline></video>
+    <video id="photo-video" autoplay loop playsinline></video>
     <div id="decision-overlay"></div>
     <div id="decision-icon"></div>
   </div>
@@ -717,6 +874,21 @@
   <div class="hint" id="hint-right">
     <span class="hint-arrow">→</span>
     <span class="hint-label">Keep</span>
+  </div>
+  <div class="hint" id="hint-up">
+    <span class="hint-arrow">↑</span>
+    <span class="hint-label">Album</span>
+  </div>
+
+  <div id="video-controls">
+    <div id="video-progress-wrap">
+      <div id="video-progress-bar"></div>
+    </div>
+    <div id="video-bottom-bar">
+      <button id="btn-mute">🔊</button>
+      <input type="range" id="video-speed-slider" min="0.5" max="3" step="0.5" value="1">
+      <span id="video-speed-label">1×</span>
+    </div>
   </div>
 
   <div id="thumb-strip"></div>
@@ -745,9 +917,21 @@
       <span class="stat-num" id="stat-del">0</span>
       <span class="stat-label-sm">to delete</span>
     </div>
+    <div class="stat-tile stat-album-tile" id="stat-album-tile" style="display:none">
+      <span class="stat-num" id="stat-album">0</span>
+      <span class="stat-label-sm">album</span>
+    </div>
   </div>
 
   <div class="thumb-grid" id="thumb-grid"></div>
+
+  <div id="album-section" style="display:none">
+    <h3 class="section-title">★ Album</h3>
+    <div class="thumb-grid" id="album-grid"></div>
+    <button class="btn-album-shortcut" id="btn-album-shortcut">★ Add to Album via Shortcuts</button>
+    <button class="btn-debug" id="btn-copy-album">Copy album list</button>
+    <pre id="debug-album-string" style="display:none"></pre>
+  </div>
 
   <div class="confirm-actions">
     <button class="btn-danger" id="btn-delete">Delete</button>
@@ -769,6 +953,8 @@ let index = 0;
 let hintsShown = false;
 let decisionStack = []; // indices of decided photos in order (for undo)
 const stripThumbs = []; // DOM refs indexed by photo index
+let sessionPlaybackRate = 1;
+let sessionMuted = false;
 
 // ── Last session reminder ───────────────────────────────
 (function() {
@@ -812,6 +998,12 @@ const confirmTitle     = document.getElementById('confirm-title');
 const thumbGrid        = document.getElementById('thumb-grid');
 const btnDelete        = document.getElementById('btn-delete');
 const btnRestart       = document.getElementById('btn-restart');
+const videoControls    = document.getElementById('video-controls');
+const videoProgressWrap = document.getElementById('video-progress-wrap');
+const videoProgressBar = document.getElementById('video-progress-bar');
+const videoSpeedSlider = document.getElementById('video-speed-slider');
+const videoSpeedLabel  = document.getElementById('video-speed-label');
+const btnMute          = document.getElementById('btn-mute');
 
 function activeMedia() {
   return photos[index]?.type === 'video' ? photoVideo : photoImg;
@@ -938,6 +1130,72 @@ function updateThumbStrip(i) {
   if (stripThumbs[i]) stripThumbs[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 }
 
+// Drag-to-scrub on the thumb strip
+let stripScrubbing = false;
+let lastStripIndex = -1;
+function doStripScrub(touch) {
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  const thumb = el?.closest?.('.strip-thumb');
+  if (!thumb) return;
+  const i = stripThumbs.indexOf(thumb);
+  if (i !== -1 && i !== lastStripIndex && photos[i]) {
+    lastStripIndex = i;
+    navigateTo(i);
+  }
+}
+thumbStrip.addEventListener('touchstart', (e) => {
+  e.stopPropagation();
+  stripScrubbing = true;
+  lastStripIndex = -1;
+  doStripScrub(e.touches[0]);
+}, { passive: true });
+thumbStrip.addEventListener('touchmove', (e) => {
+  if (!stripScrubbing) return;
+  e.stopPropagation();
+  doStripScrub(e.touches[0]);
+}, { passive: true });
+thumbStrip.addEventListener('touchend', (e) => {
+  e.stopPropagation();
+  stripScrubbing = false;
+  lastStripIndex = -1;
+});
+
+// ── Video controls ──────────────────────────────────────
+photoVideo.addEventListener('timeupdate', () => {
+  if (!photoVideo.duration) return;
+  videoProgressBar.style.width = (photoVideo.currentTime / photoVideo.duration * 100) + '%';
+});
+
+videoSpeedSlider.addEventListener('input', () => {
+  sessionPlaybackRate = parseFloat(videoSpeedSlider.value);
+  photoVideo.playbackRate = sessionPlaybackRate;
+  videoSpeedLabel.textContent = sessionPlaybackRate + '×';
+});
+
+btnMute.addEventListener('click', () => {
+  sessionMuted = !sessionMuted;
+  photoVideo.muted = sessionMuted;
+  btnMute.textContent = sessionMuted ? '🔇' : '🔊';
+});
+
+let videoScrubbing = false;
+function applyVideoScrub(touch) {
+  const rect = videoProgressWrap.getBoundingClientRect();
+  const fraction = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+  if (photoVideo.duration) photoVideo.currentTime = fraction * photoVideo.duration;
+}
+videoProgressWrap.addEventListener('touchstart', (e) => {
+  e.stopPropagation();
+  videoScrubbing = true;
+  applyVideoScrub(e.touches[0]);
+}, { passive: true });
+videoProgressWrap.addEventListener('touchmove', (e) => {
+  if (!videoScrubbing) return;
+  e.stopPropagation();
+  applyVideoScrub(e.touches[0]);
+}, { passive: true });
+videoProgressWrap.addEventListener('touchend', () => { videoScrubbing = false; });
+
 // ── Swiper ──────────────────────────────────────────────
 const btnUndo = document.getElementById('btn-undo');
 
@@ -1000,11 +1258,28 @@ function loadPhoto(i) {
     photoVideo.style.display = 'block';
     photoVideo.style.transition = 'none';
     photoVideo.src = p.url;
-    photoVideo.addEventListener('canplay', () => photoVideo.play().catch(() => {}), { once: true });
+    photoVideo.muted = sessionMuted;
+    btnMute.textContent = sessionMuted ? '🔇' : '🔊';
+    videoControls.style.display = 'block';
+    videoProgressBar.style.width = '0%';
+    videoSpeedSlider.value = sessionPlaybackRate;
+    videoSpeedLabel.textContent = sessionPlaybackRate + '×';
+    photoVideo.addEventListener('canplay', () => {
+      photoVideo.playbackRate = sessionPlaybackRate;
+      photoVideo.muted = sessionMuted;
+      photoVideo.play().catch(() => {
+        // autoplay blocked — fall back to muted
+        photoVideo.muted = true;
+        sessionMuted = true;
+        btnMute.textContent = '🔇';
+        photoVideo.play().catch(() => {});
+      });
+    }, { once: true });
   } else {
     photoVideo.pause();
     photoVideo.src = '';
     photoVideo.style.display = 'none';
+    videoControls.style.display = 'none';
     photoImg.style.display   = '';
     photoImg.style.transition = 'none';
     photoImg.src = p.url;
@@ -1075,7 +1350,7 @@ function getMonthLabel() {
 async function saveSessionData() {
   const monthLabel = getMonthLabel();
   if (!monthLabel) return;
-  const kept = photos.filter(p => p.decision === 'keep').slice(0, 3);
+  const kept = photos.filter(p => p.decision === 'keep' || p.decision === 'album').slice(0, 3);
   const thumbnails = await Promise.all(kept.map(p => {
     if (p.type === 'video') return p.thumb ? Promise.resolve(p.thumb) : getVideoThumb(p.url).then(t => { p.thumb = t; return t; });
     return new Promise(resolve => {
@@ -1108,12 +1383,16 @@ function decide(action) {
 
   decisionOverlay.className = action;
   decisionIcon.dataset.action = action;
-  decisionIcon.textContent = action === 'keep' ? '✓' : '✕';
+  decisionIcon.textContent = action === 'keep' ? '✓' : action === 'delete' ? '✕' : '★';
   decisionIcon.classList.add('show');
 
-  const dir = action === 'keep' ? -1 : 1;
   photoContainer.classList.add('animating');
-  photoContainer.style.transform = `translateX(${dir * 110}vw)`;
+  if (action === 'album') {
+    photoContainer.style.transform = 'translateY(-110vh)';
+  } else {
+    const dir = action === 'keep' ? -1 : 1;
+    photoContainer.style.transform = `translateX(${dir * 110}vw)`;
+  }
   photoContainer.style.opacity = '0';
 
   setTimeout(() => {
@@ -1138,6 +1417,7 @@ function decide(action) {
 // ── Touch / swipe / zoom / pan ───────────────────────────
 let touchStartX = 0, touchStartY = 0;
 let dragging = false;
+let draggingUp = false;
 let pinching = false, pinchStartDist = 0, pinchStartZoom = 1;
 let panStartX = 0, panStartY = 0, panStartOffsetX = 0, panStartOffsetY = 0;
 
@@ -1153,6 +1433,7 @@ swiper.addEventListener('touchstart', (e) => {
   if (e.touches.length === 2) {
     pinching = true;
     dragging = false;
+    draggingUp = false;
     pinchStartDist = pinchDist(e.touches);
     pinchStartZoom = zoom;
     return;
@@ -1164,6 +1445,7 @@ swiper.addEventListener('touchstart', (e) => {
   panStartOffsetX = panX;
   panStartOffsetY = panY;
   dragging = false;
+  draggingUp = false;
 }, { passive: true });
 
 swiper.addEventListener('touchmove', (e) => {
@@ -1183,7 +1465,8 @@ swiper.addEventListener('touchmove', (e) => {
   // swipe mode
   const dx = e.touches[0].clientX - touchStartX;
   const dy = e.touches[0].clientY - touchStartY;
-  if (!dragging && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) dragging = true;
+  if (!dragging && !draggingUp && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) dragging = true;
+  if (!dragging && !draggingUp && dy < -8 && Math.abs(dy) > Math.abs(dx)) draggingUp = true;
   if (dragging) {
     photoContainer.style.transform = `translateX(${dx}px) rotate(${dx * 0.02}deg)`;
     const ratio = Math.min(Math.abs(dx) / 80, 1);
@@ -1194,21 +1477,33 @@ swiper.addEventListener('touchmove', (e) => {
     decisionIcon.textContent = dx < 0 ? '✕' : '✓';
     decisionIcon.classList.toggle('show', ratio > 0.4);
   }
+  if (draggingUp) {
+    photoContainer.style.transform = `translateY(${Math.min(0, dy)}px)`;
+    const ratio = Math.min(Math.abs(dy) / 80, 1);
+    decisionOverlay.className = 'album';
+    decisionOverlay.style.opacity = String(ratio * 0.8);
+    decisionIcon.dataset.action = 'album';
+    decisionIcon.textContent = '★';
+    decisionIcon.classList.toggle('show', ratio > 0.4);
+  }
 }, { passive: true });
 
 swiper.addEventListener('touchend', (e) => {
   if (pinching) {
     pinching = false;
+    dragging = false;
+    draggingUp = false;
     if (zoom < 1.05) resetZoom();
     return;
   }
 
   const touch = e.changedTouches[0];
   const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
 
-  if (!dragging && zoom === 1) {
+  if (!dragging && !draggingUp && zoom === 1) {
     const stripTop = thumbStrip.getBoundingClientRect().top;
-    if (touch.clientY >= stripTop) return; // tap in thumb strip — handled by click
+    if (touch.clientY >= stripTop) return; // tap in thumb strip — handled by strip scrub
     const W = window.innerWidth;
     if (touch.clientX < W / 3) { const p = findPrev(index); if (p !== -1) navigateTo(p); }
     else if (touch.clientX > W * 2 / 3) { const n = findNext(index); if (n !== -1) navigateTo(n); }
@@ -1216,6 +1511,24 @@ swiper.addEventListener('touchend', (e) => {
   }
 
   if (zoom > 1) return; // end pan — keep position
+
+  if (draggingUp) {
+    draggingUp = false;
+    if (dy < -50) {
+      decisionOverlay.style.opacity = '';
+      decide('album');
+    } else {
+      photoContainer.classList.add('animating');
+      photoContainer.style.transform = '';
+      photoContainer.style.opacity = '';
+      decisionOverlay.className = '';
+      decisionOverlay.style.opacity = '';
+      decisionIcon.className = '';
+      delete decisionIcon.dataset.action;
+      setTimeout(() => photoContainer.classList.remove('animating'), 290);
+    }
+    return;
+  }
 
   if (dragging && Math.abs(dx) > 50) {
     decisionOverlay.style.opacity = '';
@@ -1241,6 +1554,7 @@ document.addEventListener('keydown', (e) => {
   if (!screens.swiper.classList.contains('active')) return;
   if (e.key === 'ArrowLeft')  decide('delete');
   if (e.key === 'ArrowRight') decide('keep');
+  if (e.key === 'ArrowUp')    decide('album');
   if (e.key === 'Backspace' || e.key === 'z') undo();
 });
 
@@ -1284,11 +1598,41 @@ function showConfirm() {
   saveSessionData();
 
   const toDelete = photos.filter(p => p.decision === 'delete');
-  const kept = photos.length - toDelete.length;
+  const toAlbum  = photos.filter(p => p.decision === 'album');
+  const kept = photos.length - toDelete.length - toAlbum.length;
 
   confirmTitle.textContent = `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`;
-  document.getElementById('stat-kept').textContent = kept;
-  document.getElementById('stat-del').textContent  = toDelete.length;
+  document.getElementById('stat-kept').textContent  = kept;
+  document.getElementById('stat-del').textContent   = toDelete.length;
+  document.getElementById('stat-album').textContent = toAlbum.length;
+  const albumTile = document.getElementById('stat-album-tile');
+  albumTile.style.display = toAlbum.length > 0 ? '' : 'none';
+
+  function buildThumbItem(p, badgeText, badgeColor) {
+    const div = document.createElement('div');
+    div.className = 'thumb-item';
+    const img = document.createElement('img');
+    img.alt = p.name;
+    if (p.type === 'video') {
+      if (p.thumb) { img.src = p.thumb; }
+      else { getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; }); }
+    } else {
+      img.src = p.url;
+    }
+    const badge = document.createElement('div');
+    badge.className = 'thumb-badge';
+    badge.textContent = badgeText;
+    if (badgeColor) badge.style.background = badgeColor;
+    div.appendChild(img);
+    div.appendChild(badge);
+    if (p.type === 'video') {
+      const vbadge = document.createElement('div');
+      vbadge.className = 'thumb-video-badge';
+      vbadge.textContent = '▶';
+      div.appendChild(vbadge);
+    }
+    return div;
+  }
 
   thumbGrid.innerHTML = '';
   if (toDelete.length === 0) {
@@ -1296,37 +1640,49 @@ function showConfirm() {
     btnDelete.style.display = 'none';
   } else {
     btnDelete.style.display = '';
-    toDelete.forEach(p => {
-      const div = document.createElement('div');
-      div.className = 'thumb-item';
-      const img = document.createElement('img');
-      img.alt = p.name;
-      if (p.type === 'video') {
-        if (p.thumb) { img.src = p.thumb; }
-        else { getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; }); }
-      } else {
-        img.src = p.url;
-      }
-      const badge = document.createElement('div');
-      badge.className = 'thumb-badge';
-      badge.textContent = '✕';
-      div.appendChild(img);
-      div.appendChild(badge);
-      if (p.type === 'video') {
-        const vbadge = document.createElement('div');
-        vbadge.className = 'thumb-video-badge';
-        vbadge.textContent = '▶';
-        div.appendChild(vbadge);
-      }
-      thumbGrid.appendChild(div);
-    });
+    toDelete.forEach(p => thumbGrid.appendChild(buildThumbItem(p, '✕', null)));
+  }
+
+  const albumSection = document.getElementById('album-section');
+  const albumGrid    = document.getElementById('album-grid');
+  albumGrid.innerHTML = '';
+  if (toAlbum.length > 0) {
+    albumSection.style.display = '';
+    toAlbum.forEach(p => albumGrid.appendChild(buildThumbItem(p, '★', 'var(--album)')));
+  } else {
+    albumSection.style.display = 'none';
   }
 }
 
-// ── Delete via Shortcuts ────────────────────────────────
+// ── Delete / Album via Shortcuts ────────────────────────
 function buildInput() {
   return photos.filter(p => p.decision === 'delete').map(p => `${p.name}|${p.date}`).join(',');
 }
+
+function buildAlbumInput() {
+  return photos.filter(p => p.decision === 'album').map(p => `${p.name}|${p.date}`).join(',');
+}
+
+document.getElementById('btn-album-shortcut').addEventListener('click', () => {
+  const input = buildAlbumInput();
+  if (!input) return;
+  const url = 'shortcuts://run-shortcut?name=Add%20Photos%20To%20Album%20From%20Text&input=' + encodeURIComponent(input);
+  window.location.href = url;
+});
+
+const btnCopyAlbum = document.getElementById('btn-copy-album');
+const debugAlbumString = document.getElementById('debug-album-string');
+btnCopyAlbum.addEventListener('click', () => {
+  const input = buildAlbumInput();
+  debugAlbumString.textContent = input;
+  debugAlbumString.style.display = 'block';
+  navigator.clipboard.writeText(input).then(() => {
+    btnCopyAlbum.textContent = 'Copied!';
+    setTimeout(() => { btnCopyAlbum.textContent = 'Copy album list'; }, 2000);
+  }).catch(() => {
+    btnCopyAlbum.textContent = 'See string below';
+  });
+});
 
 btnDelete.addEventListener('click', () => {
   const input = buildInput();
