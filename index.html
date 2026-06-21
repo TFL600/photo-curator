@@ -435,7 +435,7 @@
     /* ── VIDEO CONTROLS ── */
     #video-controls {
       position: absolute;
-      bottom: calc(76px + var(--safe-bottom) + 10px);
+      bottom: calc(138px + var(--safe-bottom));
       left: 10px;
       right: 10px;
       z-index: 25;
@@ -1080,10 +1080,15 @@ fileInput.addEventListener('change', async () => {
   stripThumbs.length = 0;
   fileInput.value = '';
 
+  let done = 0;
+  const total = files.length;
+  const tick = () => { btnSelect.innerHTML = `<span class="spinner"></span>Loading ${++done}/${total}…`; };
+
   async function processFile(file) {
     const isVideo = file.type.startsWith('video/');
     const url = URL.createObjectURL(file);
     const date = isVideo ? formatDate(new Date(file.lastModified)) : await getPhotoDate(file);
+    tick();
     return { file, url, name: file.name.replace(/\.[^.]+$/, ''), date, decision: null, rotation: 0, type: isVideo ? 'video' : 'image', thumb: null };
   }
 
@@ -1112,6 +1117,8 @@ function populateThumbStrip() {
     div.className = 'strip-thumb';
     const img = document.createElement('img');
     img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
     if (p.type === 'video') {
       if (p.thumb) { img.src = p.thumb; }
       else { getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; }); }
