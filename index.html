@@ -1308,8 +1308,11 @@ function loadPhoto(i) {
       });
     }, { once: true });
   } else {
+    // Fully tear down the video so iOS releases the audio session and
+    // background audio (e.g. Spotify) can resume once we're on a photo.
     photoVideo.pause();
-    photoVideo.src = '';
+    photoVideo.removeAttribute('src');
+    photoVideo.load();
     photoVideo.style.display = 'none';
     videoControls.style.display = 'none';
     photoImg.style.display   = '';
