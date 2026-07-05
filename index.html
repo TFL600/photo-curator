@@ -460,52 +460,77 @@
     #video-bottom-bar {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(20,20,22,0.42);
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.28);
     }
     #btn-mute {
-      background: rgba(255,255,255,0.13);
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 999px;
-      color: rgba(255,255,255,0.88);
-      font-size: 16px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 50%;
+      color: rgba(255,255,255,0.92);
+      font-size: 15px;
       line-height: 1;
-      padding: 6px 10px;
+      padding: 0;
       cursor: pointer;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
       flex-shrink: 0;
-      min-width: 36px;
-      min-height: 32px;
+      width: 34px;
+      height: 34px;
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: transform 0.12s ease, background 0.15s ease;
     }
-    #btn-mute:active { opacity: 0.65; }
+    #btn-mute:active { transform: scale(0.88); background: rgba(255,255,255,0.20); }
     #video-speed-slider {
       flex: 1;
       -webkit-appearance: none;
       appearance: none;
-      height: 3px;
-      border-radius: 2px;
-      background: rgba(255,255,255,0.3);
+      height: 4px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.22);
       outline: none;
       cursor: pointer;
     }
     #video-speed-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
       background: #fff;
+      border: none;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.45);
+      cursor: pointer;
+      transition: transform 0.12s ease;
+    }
+    #video-speed-slider:active::-webkit-slider-thumb { transform: scale(1.18); }
+    #video-speed-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      border: none;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.45);
       cursor: pointer;
     }
+    #video-speed-slider::-moz-range-track {
+      height: 4px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.22);
+    }
     #video-speed-label {
-      color: rgba(255,255,255,0.72);
-      font-size: 12px;
-      font-weight: 600;
-      min-width: 26px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      min-width: 30px;
       text-align: right;
       flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
     }
 
     /* ── CONFIRM ── */
@@ -1435,8 +1460,12 @@ function pinchDist(touches) {
 }
 
 const swiper = document.getElementById('screen-swiper');
+const videoControls = document.getElementById('video-controls');
+let controlsTouch = false;
 
 swiper.addEventListener('touchstart', (e) => {
+  controlsTouch = !!e.target.closest('#video-controls');
+  if (controlsTouch) return;
   if (e.touches.length === 2) {
     pinching = true;
     dragging = false;
@@ -1456,6 +1485,7 @@ swiper.addEventListener('touchstart', (e) => {
 }, { passive: true });
 
 swiper.addEventListener('touchmove', (e) => {
+  if (controlsTouch) return;
   if (e.touches.length === 2 && pinching) {
     const dist = pinchDist(e.touches);
     zoom = Math.min(5, Math.max(1, pinchStartZoom * dist / pinchStartDist));
@@ -1496,6 +1526,7 @@ swiper.addEventListener('touchmove', (e) => {
 }, { passive: true });
 
 swiper.addEventListener('touchend', (e) => {
+  if (controlsTouch) { controlsTouch = false; return; }
   if (pinching) {
     pinching = false;
     dragging = false;
