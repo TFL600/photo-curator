@@ -975,7 +975,10 @@
     <p class="load-error-hint">Indices only mean anything against the exact export they came from, so nothing was loaded. Re-run the export Shortcut and select the whole folder, <code>manifest.json</code> included.</p>
   </div>
   <button class="btn-primary" id="btn-select">Select Export Folder</button>
-  <input type="file" id="file-input" accept="image/*,video/*,application/json,.json" multiple>
+  <!-- No accept filter: iOS maps accept="application/json"/.json to a UTType
+       inconsistently and greys out manifest.json in the Files picker, which makes
+       the export folder impossible to select. Type checking happens in the guard. -->
+  <input type="file" id="file-input" multiple>
 </div>
 
 <!-- LOADING OVERLAY -->
