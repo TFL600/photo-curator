@@ -1162,6 +1162,14 @@ function parseIndexedName(filename) {
   return m ? { idx: parseInt(m[1], 10), name: m[2] } : null;
 }
 
+// Shortcuts serialises numbers inconsistently — accept "10" as well as 10,
+// but nothing looser than that.
+function toCount(v) {
+  if (Number.isInteger(v)) return v;
+  if (typeof v === 'string' && /^\d+$/.test(v.trim())) return parseInt(v, 10);
+  return null;
+}
+
 function sameName(a, b) {
   return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 }
@@ -1202,7 +1210,7 @@ async function validateSelection(files) {
       for (const k of ['count', 'first', 'last']) {
         if (mf[k] === undefined || mf[k] === null) errors.push(`${MANIFEST_NAME} has no "${k}" field.`);
       }
-      if (mf.count !== undefined && !Number.isInteger(mf.count)) {
+      if (mf.count !== undefined && toCount(mf.count) === null) {
         errors.push(`${MANIFEST_NAME} "count" is not a whole number.`);
       }
     } else if (mf !== null) {
@@ -1230,7 +1238,7 @@ async function validateSelection(files) {
   const dupes = [...new Set(entries.filter((e, i) => i > 0 && entries[i - 1].idx === e.idx).map(e => e.idx))];
   if (dupes.length) errors.push(`More than one file claims index ${listNames(dupes.map(String), 10)}.`);
 
-  const count = mf && Number.isInteger(mf.count) ? mf.count : null;
+  const count = mf ? toCount(mf.count) : null;
   if (count !== null && count !== entries.length) {
     errors.push(`Manifest counts ${count} item${count === 1 ? '' : 's'}, but ${entries.length} ${entries.length === 1 ? 'is' : 'are'} present.`);
   }
