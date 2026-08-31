@@ -192,6 +192,27 @@
       color: var(--text);
       margin-bottom: 5px;
     }
+    #load-error-diag details {
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--text-light);
+    }
+    #load-error-diag summary {
+      cursor: pointer;
+      font-weight: 600;
+      padding: 2px 0;
+    }
+    #load-error-diag pre {
+      font-size: 10.5px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 8px;
+      margin-top: 6px;
+      color: var(--text);
+    }
     .load-error-hint {
       font-size: 12px;
       line-height: 1.5;
@@ -950,6 +971,7 @@
   <div class="load-error" id="load-error" style="display:none">
     <div class="load-error-title">Can't trust this folder</div>
     <ul id="load-error-list"></ul>
+    <div id="load-error-diag"></div>
     <p class="load-error-hint">Indices only mean anything against the exact export they came from, so nothing was loaded. Re-run the export Shortcut and select the whole folder, <code>manifest.json</code> included.</p>
   </div>
   <button class="btn-primary" id="btn-select">Select Export Folder</button>
@@ -1193,18 +1215,34 @@ function formatExportedAt(raw) {
 // Returns { entries, manifest } or { errors: [...] }.
 async function validateSelection(files) {
   const errors = [];
+  const diag = [];
   const manifestFile = files.find(f => f.name.toLowerCase() === MANIFEST_NAME);
   const media  = files.filter(f => f !== manifestFile && isMediaFile(f));
   const strays = files.filter(f => f !== manifestFile && !isMediaFile(f));
+
+  diag.push(`${files.length} file(s) selected · ${media.length} media · manifest.json ${manifestFile ? 'present' : 'MISSING'}`);
 
   let mf = null;
   if (!manifestFile) {
     errors.push(`No ${MANIFEST_NAME} in the selection — select every file in the export folder, including ${MANIFEST_NAME}.`);
   } else {
+    let raw = null;
     try {
-      mf = JSON.parse(await manifestFile.text());
+      raw = await manifestFile.text();
     } catch (_) {
-      errors.push(`${MANIFEST_NAME} is not valid JSON.`);
+      errors.push(`${MANIFEST_NAME} could not be read — if it is still syncing from iCloud, wait and try again.`);
+    }
+    if (raw !== null) {
+      diag.push(`manifest.json (${raw.length} bytes): ${raw.slice(0, 400)}`);
+      if (!raw.trim()) {
+        errors.push(`${MANIFEST_NAME} is empty — it is probably still downloading from iCloud.`);
+      } else {
+        try {
+          mf = JSON.parse(raw);
+        } catch (_) {
+          errors.push(`${MANIFEST_NAME} is not valid JSON.`);
+        }
+      }
     }
     if (mf && typeof mf === 'object') {
       for (const k of ['count', 'first', 'last']) {
@@ -1255,7 +1293,14 @@ async function validateSelection(files) {
     }
   }
 
-  return errors.length ? { errors } : { entries, manifest: mf };
+  if (entries.length) {
+    const f = entries[0], l = entries[entries.length - 1];
+    diag.push(`first file: "${f.file.name}" → index ${f.idx}, name "${f.name}"`);
+    diag.push(`last file:  "${l.file.name}" → index ${l.idx}, name "${l.name}"`);
+  }
+  media.forEach(f => { if (f.size === 0) diag.push(`0 bytes (still syncing?): ${f.name}`); });
+
+  return errors.length ? { errors, diag } : { entries, manifest: mf };
 }
 
 // ── Video thumbnail ─────────────────────────────────────
@@ -1285,14 +1330,26 @@ function getVideoThumb(url) {
 // ── File loading ────────────────────────────────────────
 const loadError     = document.getElementById('load-error');
 const loadErrorList = document.getElementById('load-error-list');
+const loadErrorDiag = document.getElementById('load-error-diag');
 
-function showLoadError(errors) {
+function showLoadError(errors, diag) {
   loadErrorList.innerHTML = '';
   errors.forEach(msg => {
     const li = document.createElement('li');
     li.textContent = msg;
     loadErrorList.appendChild(li);
   });
+  loadErrorDiag.innerHTML = '';
+  if (diag && diag.length) {
+    const d = document.createElement('details');
+    const sum = document.createElement('summary');
+    sum.textContent = 'What the app saw';
+    d.appendChild(sum);
+    const pre = document.createElement('pre');
+    pre.textContent = diag.join('\n');
+    d.appendChild(pre);
+    loadErrorDiag.appendChild(d);
+  }
   loadError.style.display = '';
   loadError.scrollIntoView({ block: 'nearest' });
 }
@@ -1300,6 +1357,7 @@ function showLoadError(errors) {
 function hideLoadError() {
   loadError.style.display = 'none';
   loadErrorList.innerHTML = '';
+  loadErrorDiag.innerHTML = '';
 }
 
 function resetSelectButton() {
@@ -1327,7 +1385,7 @@ fileInput.addEventListener('change', async () => {
 
   const result = await validateSelection(files);
   resetSelectButton();
-  if (result.errors) { showLoadError(result.errors); return; }
+  if (result.errors) { showLoadError(result.errors, result.diag); return; }
 
   releasePhotos();
   manifest = result.manifest;
