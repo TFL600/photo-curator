@@ -9,7 +9,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -162,6 +161,84 @@
       border-radius: 8px;
       object-fit: cover;
       background: var(--border);
+    }
+
+    /* ── EXPORT GUARD ERROR ── */
+    .load-error {
+      width: 100%;
+      max-width: 320px;
+      background: var(--card);
+      border: 1px solid var(--delete);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+      text-align: left;
+    }
+    .load-error-title {
+      font-family: 'Fraunces', serif;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--delete);
+      margin-bottom: 8px;
+    }
+    .load-error ul {
+      margin: 0 0 10px 16px;
+      padding: 0;
+    }
+    .load-error li {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 5px;
+    }
+    .load-error-hint {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-light);
+    }
+
+    /* ── EXPORT BANNER (confirm screen) ── */
+    .export-banner {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .export-banner-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-light);
+      margin-bottom: 3px;
+    }
+    .export-banner-when {
+      font-family: 'Fraunces', serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .export-banner-meta {
+      font-size: 12px;
+      color: var(--text-light);
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    .export-banner-warn {
+      font-size: 12px;
+      color: var(--delete);
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    .index-summary {
+      font-size: 12px;
+      color: var(--text-light);
+      text-align: center;
+      margin-bottom: 6px;
     }
 
     .btn-primary {
@@ -541,6 +618,9 @@
       -webkit-overflow-scrolling: touch;
       padding: calc(28px + var(--safe-top)) 20px calc(32px + var(--safe-bottom));
     }
+    /* The screen is a scrolling flex column: without this its direct children
+       (notably #thumb-grid) shrink to zero height instead of overflowing. */
+    #screen-confirm > * { flex-shrink: 0; }
 
     .confirm-header {
       text-align: center;
@@ -702,7 +782,7 @@
     }
     .btn-debug:active { opacity: 0.6; }
 
-    pre#debug-string {
+    pre#debug-string, pre#debug-album-string {
       font-size: 11px;
       background: var(--card);
       border: 1px solid var(--border);
@@ -847,7 +927,7 @@
     </svg>
   </div>
   <h1 class="landing-title">Photo Curator</h1>
-  <p class="landing-sub">Swipe to sort your camera roll in seconds.</p>
+  <p class="landing-sub">Open an exported triage folder and swipe to sort it in seconds.</p>
   <div class="landing-hints">
     <div class="landing-hint-item">
       <span class="landing-hint-arrow">←</span>
@@ -867,8 +947,13 @@
     <div class="landing-last-month" id="landing-last-month"></div>
     <div class="landing-last-thumbs" id="landing-last-thumbs"></div>
   </div>
-  <button class="btn-primary" id="btn-select">Select Photos &amp; Videos</button>
-  <input type="file" id="file-input" accept="image/*,video/*" multiple>
+  <div class="load-error" id="load-error" style="display:none">
+    <div class="load-error-title">Can't trust this folder</div>
+    <ul id="load-error-list"></ul>
+    <p class="load-error-hint">Indices only mean anything against the exact export they came from, so nothing was loaded. Re-run the export Shortcut and select the whole folder, <code>manifest.json</code> included.</p>
+  </div>
+  <button class="btn-primary" id="btn-select">Select Export Folder</button>
+  <input type="file" id="file-input" accept="image/*,video/*,application/json,.json" multiple>
 </div>
 
 <!-- LOADING OVERLAY -->
@@ -933,6 +1018,13 @@
     <h2 class="confirm-title" id="confirm-title">Review</h2>
   </div>
 
+  <div class="export-banner" id="export-banner">
+    <div class="export-banner-label">Export taken</div>
+    <div class="export-banner-when" id="export-when">—</div>
+    <div class="export-banner-meta" id="export-meta"></div>
+    <div class="export-banner-warn" id="export-warn">Indices refer to the album as it was at this moment. If the album has changed since, re-export before deleting.</div>
+  </div>
+
   <div class="confirm-stats" id="confirm-stats">
     <div class="stat-tile">
       <span class="stat-num" id="stat-kept">0</span>
@@ -953,18 +1045,20 @@
   <div id="album-section" style="display:none">
     <h3 class="section-title">★ Album</h3>
     <div class="thumb-grid" id="album-grid"></div>
+    <div class="index-summary" id="album-index-summary"></div>
     <button class="btn-album-shortcut" id="btn-album-shortcut">★ Add to Album via Shortcuts</button>
-    <button class="btn-debug" id="btn-copy-album">Copy album list</button>
+    <button class="btn-debug" id="btn-copy-album">Copy album indices</button>
     <pre id="debug-album-string" style="display:none"></pre>
   </div>
 
   <div class="confirm-actions">
+    <div class="index-summary" id="delete-index-summary"></div>
     <button class="btn-danger" id="btn-delete">Delete</button>
     <div class="actions-secondary">
       <button class="btn-ghost" id="btn-reswipe">Restart swiping</button>
       <button class="btn-ghost" id="btn-restart">Select new photos</button>
     </div>
-    <button class="btn-debug" id="btn-copy">Copy input string</button>
+    <button class="btn-debug" id="btn-copy">Copy delete indices</button>
     <pre id="debug-string" style="display:none"></pre>
   </div>
 </div>
@@ -973,7 +1067,8 @@
 'use strict';
 
 // ── State ──────────────────────────────────────────────
-let photos = [];   // { file, url, name, date, decision }
+let photos = [];   // { file, url, idx, name, decision, rotation, type, thumb }
+let manifest = null;  // parsed manifest.json of the currently loaded export
 let index = 0;
 let hintsShown = false;
 let decisionStack = []; // indices of decided photos in order (for undo)
@@ -986,9 +1081,11 @@ let sessionMuted = false;
   const raw = localStorage.getItem('lastSession');
   if (!raw) return;
   try {
-    const { monthLabel, thumbnails } = JSON.parse(raw);
-    if (!monthLabel) return;
-    document.getElementById('landing-last-month').textContent = monthLabel;
+    const saved = JSON.parse(raw);
+    const label = saved.label;
+    const thumbnails = saved.thumbnails;
+    if (!label) return;
+    document.getElementById('landing-last-month').textContent = label;
     const thumbsEl = document.getElementById('landing-last-thumbs');
     (thumbnails || []).forEach(src => {
       if (!src) return;
@@ -1042,24 +1139,115 @@ function showScreen(name) {
   document.body.style.background = name === 'swiper' ? '#0a0a0a' : '';
 }
 
-// ── EXIF / date ─────────────────────────────────────────
-function formatDate(d) {
-  const dt = (d instanceof Date) ? d : new Date(d);
-  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  const yyyy = dt.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
+// ── Export folder parsing ───────────────────────────────
+// The export Shortcut writes one file per asset, named with the asset's
+// 1-based position in the album (sorted by Date Taken ascending) zero-padded
+// into the filename: 0001_IMG_2177.jpg. That position is the asset's identity —
+// filenames are not unique, positions are.
+const MANIFEST_NAME = 'manifest.json';
+const INDEXED_NAME_RE = /^(\d+)_(.+?)(?:\.[^.]+)?$/;
+const MEDIA_EXT_RE = /\.(jpe?g|png|gif|webp|heic|heif|mov|mp4|m4v)$/i;
+const VIDEO_EXT_RE = /\.(mov|mp4|m4v)$/i;
+
+function isMediaFile(f) {
+  return f.type.startsWith('image/') || f.type.startsWith('video/') || MEDIA_EXT_RE.test(f.name);
 }
 
-async function getPhotoDate(file) {
-  try {
-    if (typeof exifr !== 'undefined') {
-      const exif = await exifr.parse(file, ['DateTimeOriginal', 'CreateDate']);
-      const raw = exif?.DateTimeOriginal ?? exif?.CreateDate;
-      if (raw) return formatDate(raw);
+function isVideoFile(f) {
+  return f.type.startsWith('video/') || (!f.type && VIDEO_EXT_RE.test(f.name));
+}
+
+function parseIndexedName(filename) {
+  const m = INDEXED_NAME_RE.exec(filename);
+  return m ? { idx: parseInt(m[1], 10), name: m[2] } : null;
+}
+
+function sameName(a, b) {
+  return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+}
+
+function listNames(names, max = 5) {
+  const shown = names.slice(0, max).join(', ');
+  return names.length > max ? `${shown} (+${names.length - max} more)` : shown;
+}
+
+function formatExportedAt(raw) {
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return String(raw);
+  return d.toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+// The guard. Every failure here means the positions cannot be trusted, so the
+// selection is rejected outright rather than loaded with a warning.
+// Returns { entries, manifest } or { errors: [...] }.
+async function validateSelection(files) {
+  const errors = [];
+  const manifestFile = files.find(f => f.name.toLowerCase() === MANIFEST_NAME);
+  const media  = files.filter(f => f !== manifestFile && isMediaFile(f));
+  const strays = files.filter(f => f !== manifestFile && !isMediaFile(f));
+
+  let mf = null;
+  if (!manifestFile) {
+    errors.push(`No ${MANIFEST_NAME} in the selection — select every file in the export folder, including ${MANIFEST_NAME}.`);
+  } else {
+    try {
+      mf = JSON.parse(await manifestFile.text());
+    } catch (_) {
+      errors.push(`${MANIFEST_NAME} is not valid JSON.`);
     }
-  } catch (_) {}
-  return formatDate(new Date(file.lastModified));
+    if (mf && typeof mf === 'object') {
+      for (const k of ['count', 'first', 'last']) {
+        if (mf[k] === undefined || mf[k] === null) errors.push(`${MANIFEST_NAME} has no "${k}" field.`);
+      }
+      if (mf.count !== undefined && !Number.isInteger(mf.count)) {
+        errors.push(`${MANIFEST_NAME} "count" is not a whole number.`);
+      }
+    } else if (mf !== null) {
+      errors.push(`${MANIFEST_NAME} is not a JSON object.`);
+      mf = null;
+    }
+  }
+
+  if (strays.length) errors.push(`Not a photo or video: ${listNames(strays.map(f => f.name))}.`);
+  if (!media.length) errors.push('No photos or videos in the selection.');
+
+  const entries = [];
+  const unindexed = [];
+  for (const file of media) {
+    const parsed = parseIndexedName(file.name);
+    if (!parsed) { unindexed.push(file.name); continue; }
+    entries.push({ file, idx: parsed.idx, name: parsed.name });
+  }
+  if (unindexed.length) {
+    errors.push(`No NNNN_ index prefix on: ${listNames(unindexed)}.`);
+  }
+
+  entries.sort((a, b) => a.idx - b.idx);
+
+  const dupes = [...new Set(entries.filter((e, i) => i > 0 && entries[i - 1].idx === e.idx).map(e => e.idx))];
+  if (dupes.length) errors.push(`More than one file claims index ${listNames(dupes.map(String), 10)}.`);
+
+  const count = mf && Number.isInteger(mf.count) ? mf.count : null;
+  if (count !== null && count !== entries.length) {
+    errors.push(`Manifest counts ${count} item${count === 1 ? '' : 's'}, but ${entries.length} ${entries.length === 1 ? 'is' : 'are'} present.`);
+  }
+  if (!dupes.length && !unindexed.length) {
+    const gap = entries.find((e, i) => e.idx !== i + 1);
+    if (gap) errors.push(`Indices are not a continuous run from 1 to ${entries.length} — first break at ${gap.idx}.`);
+  }
+  if (entries.length && mf) {
+    if (mf.first !== undefined && !sameName(entries[0].name, mf.first)) {
+      errors.push(`Manifest says the first item is ${mf.first}, but it is ${entries[0].name}.`);
+    }
+    if (mf.last !== undefined && !sameName(entries[entries.length - 1].name, mf.last)) {
+      errors.push(`Manifest says the last item is ${mf.last}, but it is ${entries[entries.length - 1].name}.`);
+    }
+  }
+
+  return errors.length ? { errors } : { entries, manifest: mf };
 }
 
 // ── Video thumbnail ─────────────────────────────────────
@@ -1087,44 +1275,71 @@ function getVideoThumb(url) {
 }
 
 // ── File loading ────────────────────────────────────────
+const loadError     = document.getElementById('load-error');
+const loadErrorList = document.getElementById('load-error-list');
+
+function showLoadError(errors) {
+  loadErrorList.innerHTML = '';
+  errors.forEach(msg => {
+    const li = document.createElement('li');
+    li.textContent = msg;
+    loadErrorList.appendChild(li);
+  });
+  loadError.style.display = '';
+  loadError.scrollIntoView({ block: 'nearest' });
+}
+
+function hideLoadError() {
+  loadError.style.display = 'none';
+  loadErrorList.innerHTML = '';
+}
+
+function resetSelectButton() {
+  btnSelect.innerHTML = 'Select Export Folder';
+  btnSelect.classList.remove('loading');
+  btnSelect.disabled = false;
+}
+
+function releasePhotos() {
+  photos.forEach(p => URL.revokeObjectURL(p.url));
+  photos = [];
+}
+
 btnSelect.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async () => {
   const files = Array.from(fileInput.files);
+  fileInput.value = '';
   if (!files.length) return;
 
-  btnSelect.innerHTML = '<span class="spinner"></span>Loading…';
+  hideLoadError();
+  btnSelect.innerHTML = '<span class="spinner"></span>Checking export…';
   btnSelect.classList.add('loading');
   btnSelect.disabled = true;
 
-  photos.forEach(p => URL.revokeObjectURL(p.url));
-  photos = [];
+  const result = await validateSelection(files);
+  resetSelectButton();
+  if (result.errors) { showLoadError(result.errors); return; }
+
+  releasePhotos();
+  manifest = result.manifest;
   index = 0;
   hintsShown = false;
   decisionStack = [];
   stripThumbs.length = 0;
-  fileInput.value = '';
 
-  let done = 0;
-  const total = files.length;
-  const tick = () => { btnSelect.innerHTML = `<span class="spinner"></span>Loading ${++done}/${total}…`; };
+  // Already sorted by index — that order is the album order at export time.
+  photos = result.entries.map(e => ({
+    file: e.file,
+    url: URL.createObjectURL(e.file),
+    idx: e.idx,
+    name: e.name,
+    decision: null,
+    rotation: 0,
+    type: isVideoFile(e.file) ? 'video' : 'image',
+    thumb: null,
+  }));
 
-  async function processFile(file) {
-    const isVideo = file.type.startsWith('video/');
-    const url = URL.createObjectURL(file);
-    const date = isVideo ? formatDate(new Date(file.lastModified)) : await getPhotoDate(file);
-    tick();
-    return { file, url, name: file.name.replace(/\.[^.]+$/, ''), date, decision: null, rotation: 0, type: isVideo ? 'video' : 'image', thumb: null };
-  }
-
-  const entries = await Promise.all(files.map(f => processFile(f)));
-  const parse = d => { const [dd,mm,yyyy] = d.split('/'); return new Date(yyyy, mm-1, dd); };
-  entries.sort((a, b) => parse(a.date) - parse(b.date));
-  photos.push(...entries);
-
-  btnSelect.innerHTML = 'Select Photos';
-  btnSelect.classList.remove('loading');
-  btnSelect.disabled = false;
   showScreen('swiper');
   populateThumbStrip();
   loadPhoto(0);
@@ -1362,29 +1577,16 @@ function undo() {
   loadPhoto(index);
 }
 
-function todayFormatted() {
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2, '0');
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const yyyy = now.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-}
-
-function getMonthLabel() {
-  if (!photos.length) return '';
-  const counts = {};
-  photos.forEach(p => {
-    const [, mm, yyyy] = p.date.split('/');
-    const key = `${yyyy}-${mm}`;
-    counts[key] = (counts[key] || 0) + 1;
-  });
-  const [yyyy, mm] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0].split('-');
-  return new Date(+yyyy, +mm - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+function sessionLabel() {
+  if (!manifest) return '';
+  const when = formatExportedAt(manifest.exportedAt);
+  const album = manifest.album ? String(manifest.album) : 'Export';
+  return when ? `${album} · ${when}` : album;
 }
 
 async function saveSessionData() {
-  const monthLabel = getMonthLabel();
-  if (!monthLabel) return;
+  const label = sessionLabel();
+  if (!label) return;
   const kept = photos.filter(p => p.decision === 'keep' || p.decision === 'album').slice(0, 3);
   const thumbnails = await Promise.all(kept.map(p => {
     if (p.type === 'video') return p.thumb ? Promise.resolve(p.thumb) : getVideoThumb(p.url).then(t => { p.thumb = t; return t; });
@@ -1406,7 +1608,7 @@ async function saveSessionData() {
     });
   }));
   try {
-    localStorage.setItem('lastSession', JSON.stringify({ monthLabel, thumbnails: thumbnails.filter(Boolean) }));
+    localStorage.setItem('lastSession', JSON.stringify({ label, thumbnails: thumbnails.filter(Boolean) }));
   } catch (_) {}
 }
 
@@ -1639,7 +1841,17 @@ function showConfirm() {
 
   const toDelete = photos.filter(p => p.decision === 'delete');
   const toAlbum  = photos.filter(p => p.decision === 'album');
-  const kept = photos.length - toDelete.length - toAlbum.length;
+  const kept = photos.filter(p => p.decision === 'keep').length;
+
+  // Indices are only valid against the album as it stood at export time — the
+  // one failure mode the manifest guard cannot detect. Say when that was.
+  const when = formatExportedAt(manifest?.exportedAt);
+  document.getElementById('export-when').textContent = when || 'Unknown';
+  document.getElementById('export-meta').textContent =
+    [manifest?.album && `Album "${manifest.album}"`, `${photos.length} item${photos.length === 1 ? '' : 's'}`]
+      .filter(Boolean).join(' · ');
+  document.getElementById('delete-index-summary').textContent = describeIndices(indicesFor('delete'));
+  document.getElementById('album-index-summary').textContent  = describeIndices(indicesFor('album'));
 
   confirmTitle.textContent = `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`;
   document.getElementById('stat-kept').textContent  = kept;
@@ -1695,18 +1907,30 @@ function showConfirm() {
 }
 
 // ── Delete / Album via Shortcuts ────────────────────────
+// Positions only: ascending, deduplicated, comma-separated, no spaces.
+function indicesFor(decision) {
+  return [...new Set(photos.filter(p => p.decision === decision).map(p => p.idx))]
+    .sort((a, b) => a - b);
+}
+
+function describeIndices(list) {
+  if (!list.length) return 'No indices selected';
+  const range = list.length === 1 ? `#${list[0]}` : `#${list[0]}–#${list[list.length - 1]}`;
+  return `${list.length} ${list.length === 1 ? 'index' : 'indices'} · ${range}`;
+}
+
 function buildInput() {
-  return photos.filter(p => p.decision === 'delete').map(p => `${p.name}|${p.date}`).join(',');
+  return indicesFor('delete').join(',');
 }
 
 function buildAlbumInput() {
-  return photos.filter(p => p.decision === 'album').map(p => `${p.name}|${p.date}`).join(',');
+  return indicesFor('album').join(',');
 }
 
 document.getElementById('btn-album-shortcut').addEventListener('click', () => {
   const input = buildAlbumInput();
   if (!input) return;
-  const url = 'shortcuts://run-shortcut?name=Add%20Photos%20To%20Album%20From%20Text&input=' + encodeURIComponent(input);
+  const url = 'shortcuts://run-shortcut?name=Add%20Photos%20To%20Album%20By%20Index&input=' + encodeURIComponent(input);
   window.location.href = url;
 });
 
@@ -1718,7 +1942,7 @@ btnCopyAlbum.addEventListener('click', () => {
   debugAlbumString.style.display = 'block';
   navigator.clipboard.writeText(input).then(() => {
     btnCopyAlbum.textContent = 'Copied!';
-    setTimeout(() => { btnCopyAlbum.textContent = 'Copy album list'; }, 2000);
+    setTimeout(() => { btnCopyAlbum.textContent = 'Copy album indices'; }, 2000);
   }).catch(() => {
     btnCopyAlbum.textContent = 'See string below';
   });
@@ -1727,7 +1951,7 @@ btnCopyAlbum.addEventListener('click', () => {
 btnDelete.addEventListener('click', () => {
   const input = buildInput();
   if (!input) return;
-  const url = 'shortcuts://run-shortcut?name=Delete%20Photos%20From%20Text&input=' + encodeURIComponent(input);
+  const url = 'shortcuts://run-shortcut?name=Delete%20Photos%20By%20Index&input=' + encodeURIComponent(input);
   window.location.href = url;
 });
 
@@ -1739,7 +1963,7 @@ btnCopy.addEventListener('click', () => {
   debugString.style.display = 'block';
   navigator.clipboard.writeText(input).then(() => {
     btnCopy.textContent = 'Copied!';
-    setTimeout(() => { btnCopy.textContent = 'Copy input string'; }, 2000);
+    setTimeout(() => { btnCopy.textContent = 'Copy delete indices'; }, 2000);
   }).catch(() => {
     btnCopy.textContent = 'See string below';
   });
@@ -1759,9 +1983,12 @@ document.getElementById('btn-reswipe').addEventListener('click', () => {
 
 // ── Select new photos ────────────────────────────────────
 btnRestart.addEventListener('click', () => {
-  photos.forEach(p => URL.revokeObjectURL(p.url));
-  photos = [];
+  releasePhotos();
+  manifest = null;
   index = 0;
+  decisionStack = [];
+  stripThumbs.length = 0;
+  hideLoadError();
   showScreen('landing');
 });
 
