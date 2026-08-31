@@ -1170,7 +1170,9 @@ function showScreen(name) {
 // into the filename: 0001_IMG_2177.jpg. That position is the asset's identity —
 // filenames are not unique, positions are.
 const MANIFEST_NAME = 'manifest.json';
-const INDEXED_NAME_RE = /^(\d+)_(.+?)(?:\.[^.]+)?$/;
+// Either "3.jpg" or "3_IMG_2177.jpg" — the name part is optional and is only
+// ever used for display. Identity is the leading number.
+const INDEXED_NAME_RE = /^(\d+)(?:_(.+?))?(?:\.[^.]+)?$/;
 const MEDIA_EXT_RE = /\.(jpe?g|png|gif|webp|heic|heif|mov|mp4|m4v)$/i;
 const VIDEO_EXT_RE = /\.(mov|mp4|m4v)$/i;
 
@@ -1184,7 +1186,7 @@ function isVideoFile(f) {
 
 function parseIndexedName(filename) {
   const m = INDEXED_NAME_RE.exec(filename);
-  return m ? { idx: parseInt(m[1], 10), name: m[2] } : null;
+  return m ? { idx: parseInt(m[1], 10), name: m[2] || '' } : null;
 }
 
 // Shortcuts serialises numbers inconsistently — accept "10" as well as 10,
@@ -1248,7 +1250,7 @@ async function validateSelection(files) {
       }
     }
     if (mf && typeof mf === 'object') {
-      for (const k of ['count', 'first', 'last']) {
+      for (const k of ['count']) {
         if (mf[k] === undefined || mf[k] === null) errors.push(`${MANIFEST_NAME} has no "${k}" field.`);
       }
       if (mf.count !== undefined && toCount(mf.count) === null) {
@@ -1271,7 +1273,7 @@ async function validateSelection(files) {
     entries.push({ file, idx: parsed.idx, name: parsed.name });
   }
   if (unindexed.length) {
-    errors.push(`No NNNN_ index prefix on: ${listNames(unindexed)}.`);
+    errors.push(`Filename does not start with an index number: ${listNames(unindexed)}.`);
   }
 
   entries.sort((a, b) => a.idx - b.idx);
@@ -1288,18 +1290,19 @@ async function validateSelection(files) {
     if (gap) errors.push(`Indices are not a continuous run from 1 to ${entries.length} — first break at ${gap.idx}.`);
   }
   if (entries.length && mf) {
-    if (mf.first !== undefined && !sameName(entries[0].name, mf.first)) {
+    const named = entries.some(e => e.name);
+    if (mf.first && named && !sameName(entries[0].name, mf.first)) {
       errors.push(`Manifest says the first item is ${mf.first}, but it is ${entries[0].name}.`);
     }
-    if (mf.last !== undefined && !sameName(entries[entries.length - 1].name, mf.last)) {
+    if (mf.last && named && !sameName(entries[entries.length - 1].name, mf.last)) {
       errors.push(`Manifest says the last item is ${mf.last}, but it is ${entries[entries.length - 1].name}.`);
     }
   }
 
   if (entries.length) {
     const f = entries[0], l = entries[entries.length - 1];
-    diag.push(`first file: "${f.file.name}" → index ${f.idx}, name "${f.name}"`);
-    diag.push(`last file:  "${l.file.name}" → index ${l.idx}, name "${l.name}"`);
+    diag.push(`first file: "${f.file.name}" → index ${f.idx}${f.name ? `, name "${f.name}"` : ''}`);
+    diag.push(`last file:  "${l.file.name}" → index ${l.idx}${l.name ? `, name "${l.name}"` : ''}`);
   }
   media.forEach(f => { if (f.size === 0) diag.push(`0 bytes (still syncing?): ${f.name}`); });
 
