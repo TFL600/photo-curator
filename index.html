@@ -320,7 +320,7 @@
       color: var(--text-light);
     }
 
-    #file-input { display: none; }
+    #file-input, #quick-input { display: none; }
 
     /* ── SWIPER ── */
     #screen-swiper {
@@ -935,6 +935,132 @@
     .btn-eos:active { opacity: 0.8; transform: scale(0.97); }
     .btn-eos-primary { background: #fff; color: #0a0a0a; }
     .btn-eos-secondary { background: rgba(255,255,255,0.13); color: rgba(255,255,255,0.88); }
+
+    /* ── STAGE (grid pre-pass for a category) ── */
+    #screen-stage {
+      flex-direction: column;
+      background: var(--bg);
+      padding: calc(20px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+    }
+    .stage-head { flex: 0 0 auto; text-align: center; padding: 0 4px 14px; }
+    .stage-title {
+      font-family: 'Fraunces', serif;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .stage-sub {
+      font-size: 14px;
+      color: var(--text-light);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+    .stage-grid {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+      gap: 8px;
+      align-content: start;
+      padding-bottom: 8px;
+    }
+    .stage-cell {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--border);
+      cursor: pointer;
+    }
+    .stage-cell img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    .stage-cell::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius-md);
+      box-shadow: inset 0 0 0 0 var(--keep);
+      transition: box-shadow 0.15s ease;
+      pointer-events: none;
+    }
+    .stage-cell.picked::after { box-shadow: inset 0 0 0 4px var(--keep); }
+    .stage-cell.picked img { transform: scale(0.92); }
+    .stage-cell:not(.picked) img { opacity: 0.55; }
+    .stage-tick {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--keep);
+      color: #fff;
+      font-size: 13px;
+      line-height: 22px;
+      text-align: center;
+      opacity: 0;
+      transform: scale(0.6);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .stage-cell.picked .stage-tick { opacity: 1; transform: scale(1); }
+    .stage-video-badge {
+      position: absolute;
+      bottom: 5px;
+      left: 5px;
+      font-size: 11px;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
+    .stage-foot { flex: 0 0 auto; padding-top: 12px; }
+    .stage-tally {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-light);
+      margin-bottom: 10px;
+    }
+    .stage-tally b { color: var(--text); font-weight: 600; }
+    .stage-actions { display: flex; gap: 10px; }
+    .stage-actions button { flex: 1; }
+
+    /* ── LANDING: two ways in ── */
+    .landing-buttons {
+      width: 100%;
+      max-width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .btn-secondary {
+      width: 100%;
+      padding: 15px 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--card);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-secondary:active { transform: scale(0.985); }
+    .quick-note {
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--delete);
+      border-radius: var(--radius-md);
+      background: var(--card);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-light);
+    }
+    .quick-note b { color: var(--text); }
   </style>
 </head>
 <body>
@@ -974,11 +1100,33 @@
     <div id="load-error-diag"></div>
     <p class="load-error-hint">Indices only mean anything against the exact export they came from, so nothing was loaded. Re-run the export Shortcut and select the whole folder, <code>manifest.json</code> included.</p>
   </div>
-  <button class="btn-primary" id="btn-select">Select Export Folder</button>
-  <!-- No accept filter: iOS maps accept="application/json"/.json to a UTType
-       inconsistently and greys out manifest.json in the Files picker, which makes
-       the export folder impossible to select. Type checking happens in the guard. -->
+  <div class="landing-buttons">
+    <button class="btn-primary" id="btn-select">Open Export Folder</button>
+    <button class="btn-secondary" id="btn-quick">Pick a few photos</button>
+  </div>
+  <!-- No accept filter on the export input: iOS maps accept="application/json"/.json
+       to a UTType inconsistently and greys out manifest.json in the Files picker, which
+       makes the export folder impossible to select. Type checking happens in the guard. -->
   <input type="file" id="file-input" multiple>
+  <!-- Quick input: accept limits the sheet to media, which is the closest iOS lets a
+       web page get to opening the photo library directly. -->
+  <input type="file" id="quick-input" accept="image/*,video/*" multiple>
+</div>
+
+<!-- STAGE: grid pre-pass for one category -->
+<div id="screen-stage" class="screen">
+  <div class="stage-head">
+    <div class="stage-title" id="stage-title">WhatsApp</div>
+    <div class="stage-sub" id="stage-sub"></div>
+  </div>
+  <div class="stage-grid" id="stage-grid"></div>
+  <div class="stage-foot">
+    <div class="stage-tally" id="stage-tally"></div>
+    <div class="stage-actions">
+      <button class="btn-secondary" id="btn-stage-all">Swipe all</button>
+      <button class="btn-primary" id="btn-stage-go">Continue</button>
+    </div>
+  </div>
 </div>
 
 <!-- LOADING OVERLAY -->
@@ -1043,6 +1191,12 @@
     <h2 class="confirm-title" id="confirm-title">Review</h2>
   </div>
 
+  <div class="quick-note" id="quick-note" style="display:none">
+    <b>Quick pick — no export indices.</b> These photos were chosen by hand, so the app
+    cannot identify them by position. The Shortcut has to match them by filename, which is
+    not unique, so it shows you everything it matched before anything is deleted.
+  </div>
+
   <div class="export-banner" id="export-banner">
     <div class="export-banner-label">Export taken</div>
     <div class="export-banner-when" id="export-when">—</div>
@@ -1100,6 +1254,9 @@ let decisionStack = []; // indices of decided photos in order (for undo)
 const stripThumbs = []; // DOM refs indexed by photo index
 let sessionPlaybackRate = 1;
 let sessionMuted = false;
+// Quick pick: photos chosen by hand from the library. No manifest, no export
+// positions, so nothing downstream may claim index identity for them.
+let quickMode = false;
 
 // ── Last session reminder ───────────────────────────────
 (function() {
@@ -1126,12 +1283,15 @@ let sessionMuted = false;
 // ── Elements ───────────────────────────────────────────
 const screens = {
   landing: document.getElementById('screen-landing'),
+  stage:   document.getElementById('screen-stage'),
   swiper:  document.getElementById('screen-swiper'),
   confirm: document.getElementById('screen-confirm'),
 };
 
 const fileInput        = document.getElementById('file-input');
+const quickInput       = document.getElementById('quick-input');
 const btnSelect        = document.getElementById('btn-select');
+const btnQuick         = document.getElementById('btn-quick');
 const photoContainer   = document.getElementById('photo-container');
 const photoImg         = document.getElementById('photo-img');
 const photoVideo       = document.getElementById('photo-video');
@@ -1175,6 +1335,23 @@ const MANIFEST_NAME = 'manifest.json';
 const INDEXED_NAME_RE = /^(\d+)(?:_(.+?))?(?:\.[^.]+)?$/;
 const MEDIA_EXT_RE = /\.(jpe?g|png|gif|webp|heic|heif|mov|mp4|m4v)$/i;
 const VIDEO_EXT_RE = /\.(mov|mp4|m4v)$/i;
+// Optional sidecars written by the export Shortcut: one original asset name per
+// line, naming the members of a category. They only steer the staging UI, never
+// identity, so a name collision costs a mis-staged thumbnail and nothing more.
+const SIDECAR_RE = /^group-([a-z0-9_-]+)\.txt$/i;
+const KIND_ORDER  = ['whatsapp', 'screenshot'];
+const KIND_LABEL  = { whatsapp: 'WhatsApp', screenshot: 'Screenshots' };
+const KIND_BLURB  = {
+  whatsapp:   'Most of these are forwards you will never look at again.',
+  screenshot: 'Most of these did their job the moment you took them.',
+};
+
+// Compare an exported name segment against a sidecar line. The export keeps the
+// original name including its extension ("IMG_2177.HEIC"), but older exports and
+// hand-written sidecars may drop it, so strip one extension from both sides.
+function normaliseAssetName(n) {
+  return String(n ?? '').trim().toLowerCase().replace(/\.[^.\/]+$/, '');
+}
 
 function isMediaFile(f) {
   return f.type.startsWith('image/') || f.type.startsWith('video/') || MEDIA_EXT_RE.test(f.name);
@@ -1206,13 +1383,32 @@ function listNames(names, max = 5) {
   return names.length > max ? `${shown} (+${names.length - max} more)` : shown;
 }
 
+// The export writes "2026-09-06 18:30:00". Safari parses that, other engines are
+// less reliable about it, so normalise to ISO before handing it to Date.
+function parseExportDate(raw) {
+  if (!raw) return null;
+  const d = new Date(String(raw).replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T'));
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function formatExportedAt(raw) {
   if (!raw) return null;
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return String(raw);
+  const d = parseExportDate(raw);
+  if (!d) return String(raw);
   return d.toLocaleString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
   });
+}
+
+// How long the export Shortcut took, so it is obvious whether the wait is the
+// resizing or something else. Only shown when both timestamps parse.
+function exportDuration(mf) {
+  const a = parseExportDate(mf?.startedAt), b = parseExportDate(mf?.exportedAt);
+  if (!a || !b) return null;
+  const secs = Math.round((b - a) / 1000);
+  if (secs < 0 || secs > 24 * 3600) return null;
+  if (secs < 60) return `${secs}s`;
+  return `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s`;
 }
 
 // The guard. Every failure here means the positions cannot be trusted, so the
@@ -1222,10 +1418,11 @@ async function validateSelection(files) {
   const errors = [];
   const diag = [];
   const manifestFile = files.find(f => f.name.toLowerCase() === MANIFEST_NAME);
-  const media  = files.filter(f => f !== manifestFile && isMediaFile(f));
-  const strays = files.filter(f => f !== manifestFile && !isMediaFile(f));
+  const sidecars = files.filter(f => f !== manifestFile && SIDECAR_RE.test(f.name));
+  const media  = files.filter(f => f !== manifestFile && !sidecars.includes(f) && isMediaFile(f));
+  const strays = files.filter(f => f !== manifestFile && !sidecars.includes(f) && !isMediaFile(f));
 
-  diag.push(`${files.length} file(s) selected · ${media.length} media · manifest.json ${manifestFile ? 'present' : 'MISSING'}`);
+  diag.push(`${files.length} file(s) selected · ${media.length} media · ${sidecars.length} group file(s) · manifest.json ${manifestFile ? 'present' : 'MISSING'}`);
 
   let mf = null;
   if (!manifestFile) {
@@ -1297,6 +1494,24 @@ async function validateSelection(files) {
     if (mf.last && named && !sameName(entries[entries.length - 1].name, mf.last)) {
       errors.push(`Manifest says the last item is ${mf.last}, but it is ${entries[entries.length - 1].name}.`);
     }
+  }
+
+  // Categories. Read after the integrity checks so a broken sidecar can never
+  // be the reason a good export is rejected — an unreadable one is just dropped.
+  for (const file of sidecars) {
+    const kind = SIDECAR_RE.exec(file.name)[1].toLowerCase();
+    let names = null;
+    try {
+      names = new Set((await file.text()).split(/\r?\n/).map(normaliseAssetName).filter(Boolean));
+    } catch (_) {
+      diag.push(`group file could not be read, ignored: ${file.name}`);
+      continue;
+    }
+    let hits = 0;
+    for (const e of entries) {
+      if (!e.kind && e.name && names.has(normaliseAssetName(e.name))) { e.kind = kind; hits++; }
+    }
+    diag.push(`${file.name}: ${names.size} name(s) → ${hits} item(s) tagged "${kind}"`);
   }
 
   if (entries.length) {
@@ -1377,7 +1592,53 @@ function releasePhotos() {
   photos = [];
 }
 
+// entries are already in the order that defines identity: for an export that is
+// ascending index, for a quick pick it is only the order the picker handed them over.
+function startSession(entries, mf, opts) {
+  releasePhotos();
+  manifest = mf;
+  quickMode = !!(opts && opts.quick);
+  index = 0;
+  hintsShown = false;
+  decisionStack = [];
+  stripThumbs.length = 0;
+
+  photos = entries.map(e => ({
+    file: e.file,
+    url: URL.createObjectURL(e.file),
+    idx: e.idx,
+    name: e.name,
+    kind: e.kind || null,
+    decision: null,
+    rotation: 0,
+    type: isVideoFile(e.file) ? 'video' : 'image',
+    thumb: null,
+  }));
+
+  const kinds = [...new Set(photos.map(p => p.kind).filter(Boolean))]
+    .sort((a, b) => {
+      const ai = KIND_ORDER.indexOf(a), bi = KIND_ORDER.indexOf(b);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.localeCompare(b);
+    });
+
+  if (kinds.length) startStaging(kinds);
+  else enterSwiper();
+}
+
+// Enters the swipe stack at the first item nobody has decided on yet — staging
+// may already have settled a large chunk of them.
+function enterSwiper() {
+  showScreen('swiper');
+  populateThumbStrip();
+  const first = photos.findIndex(p => p.decision === null);
+  if (first === -1) { index = photos.length; showConfirm(); return; }
+  index = first;
+  loadPhoto(index);
+  showHints();
+}
+
 btnSelect.addEventListener('click', () => fileInput.click());
+btnQuick.addEventListener('click', () => quickInput.click());
 
 fileInput.addEventListener('change', async () => {
   const files = Array.from(fileInput.files);
@@ -1393,29 +1654,125 @@ fileInput.addEventListener('change', async () => {
   resetSelectButton();
   if (result.errors) { showLoadError(result.errors, result.diag); return; }
 
-  releasePhotos();
-  manifest = result.manifest;
-  index = 0;
-  hintsShown = false;
-  decisionStack = [];
-  stripThumbs.length = 0;
+  startSession(result.entries, result.manifest, { quick: false });
+});
 
-  // Already sorted by index — that order is the album order at export time.
-  photos = result.entries.map(e => ({
-    file: e.file,
-    url: URL.createObjectURL(e.file),
-    idx: e.idx,
-    name: e.name,
-    decision: null,
-    rotation: 0,
-    type: isVideoFile(e.file) ? 'video' : 'image',
-    thumb: null,
-  }));
+// Quick pick has no manifest and no guard: there is nothing to guard, because
+// nothing here is addressed by position. The only check is that it is media.
+quickInput.addEventListener('change', () => {
+  const files = Array.from(quickInput.files);
+  quickInput.value = '';
+  if (!files.length) return;
 
-  showScreen('swiper');
-  populateThumbStrip();
-  loadPhoto(0);
-  showHints();
+  hideLoadError();
+  const media = files.filter(isMediaFile);
+  if (!media.length) {
+    showLoadError(['Nothing in that selection is a photo or a video.'], null);
+    return;
+  }
+  const skipped = files.length - media.length;
+  const entries = media.map(file => ({ file, idx: null, name: file.name }));
+  startSession(entries, null, { quick: true });
+  if (skipped) console.warn(`quick pick: skipped ${skipped} non-media file(s)`);
+});
+
+// ── Staging (grid pre-pass) ─────────────────────────────
+// For categories where the default answer is "bin it" — WhatsApp forwards,
+// screenshots — swiping every one is wasted effort. Show the whole category as a
+// grid, tap only the ones worth a proper look, and everything untapped is marked
+// for deletion without ever reaching the swipe stack. Nothing is deleted here:
+// the confirm screen still shows every one of them before anything leaves.
+const stageGrid   = document.getElementById('stage-grid');
+const stageTitle  = document.getElementById('stage-title');
+const stageSub    = document.getElementById('stage-sub');
+const stageTally  = document.getElementById('stage-tally');
+
+let stageQueue  = [];   // kinds still to be shown
+let stageItems  = [];   // photos in the category on screen
+let stagePicked = new Set();
+
+function startStaging(kinds) {
+  stageQueue = kinds.slice();
+  nextStage();
+}
+
+function nextStage() {
+  while (stageQueue.length) {
+    const kind = stageQueue.shift();
+    const items = photos.filter(p => p.kind === kind && p.decision === null);
+    if (items.length) { renderStage(kind, items); return; }
+  }
+  enterSwiper();
+}
+
+function renderStage(kind, items) {
+  stageItems = items;
+  stagePicked = new Set();
+  stageTitle.textContent = KIND_LABEL[kind] || kind;
+  stageSub.textContent =
+    `${items.length} item${items.length === 1 ? '' : 's'}. ` +
+    (KIND_BLURB[kind] || 'Tap the ones worth a closer look.') +
+    ' Tap the ones you want to swipe; the rest go straight to the delete pile.';
+
+  stageGrid.innerHTML = '';
+  stageGrid.scrollTop = 0;
+  items.forEach(p => {
+    const cell = document.createElement('div');
+    cell.className = 'stage-cell';
+    const img = document.createElement('img');
+    img.alt = p.name || '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    if (p.type === 'video') {
+      if (p.thumb) img.src = p.thumb;
+      else getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; });
+    } else {
+      img.src = p.url;
+    }
+    const tick = document.createElement('div');
+    tick.className = 'stage-tick';
+    tick.textContent = '✓';
+    cell.appendChild(img);
+    cell.appendChild(tick);
+    if (p.type === 'video') {
+      const v = document.createElement('div');
+      v.className = 'stage-video-badge';
+      v.textContent = '▶';
+      cell.appendChild(v);
+    }
+    cell.addEventListener('click', () => {
+      if (stagePicked.has(p)) stagePicked.delete(p); else stagePicked.add(p);
+      cell.classList.toggle('picked', stagePicked.has(p));
+      updateStageTally();
+    });
+    stageGrid.appendChild(cell);
+  });
+
+  updateStageTally();
+  showScreen('stage');
+}
+
+function updateStageTally() {
+  const keep = stagePicked.size;
+  const drop = stageItems.length - keep;
+  stageTally.innerHTML = `<b>${keep}</b> to swipe · <b>${drop}</b> straight to the delete pile`;
+}
+
+function commitStage() {
+  stageItems.forEach(p => {
+    if (stagePicked.has(p)) return;
+    const i = photos.indexOf(p);
+    p.decision = 'delete';
+    decisionStack.push(i);
+  });
+  nextStage();
+}
+
+document.getElementById('btn-stage-go').addEventListener('click', commitStage);
+document.getElementById('btn-stage-all').addEventListener('click', () => {
+  // Escape hatch: treat the whole category as ordinary photos.
+  stagePicked = new Set(stageItems);
+  commitStage();
 });
 
 // ── Thumb strip ─────────────────────────────────────────
@@ -1439,6 +1796,7 @@ function populateThumbStrip() {
     }
     div.appendChild(img);
     div.addEventListener('click', () => navigateTo(i));
+    if (p.decision !== null) div.style.display = 'none';
     thumbStrip.appendChild(div);
     stripThumbs[i] = div;
   });
@@ -1650,6 +2008,7 @@ function undo() {
 }
 
 function sessionLabel() {
+  if (quickMode) return `Quick pick · ${formatExportedAt(new Date().toISOString())}`;
   if (!manifest) return '';
   const when = formatExportedAt(manifest.exportedAt);
   const album = manifest.album ? String(manifest.album) : 'Export';
@@ -1917,13 +2276,26 @@ function showConfirm() {
 
   // Indices are only valid against the album as it stood at export time — the
   // one failure mode the manifest guard cannot detect. Say when that was.
+  document.getElementById('quick-note').style.display    = quickMode ? '' : 'none';
+  document.getElementById('export-banner').style.display = quickMode ? 'none' : '';
   const when = formatExportedAt(manifest?.exportedAt);
   document.getElementById('export-when').textContent = when || 'Unknown';
+  const took = exportDuration(manifest);
   document.getElementById('export-meta').textContent =
-    [manifest?.album && `Album "${manifest.album}"`, `${photos.length} item${photos.length === 1 ? '' : 's'}`]
+    [manifest?.album && `Album "${manifest.album}"`,
+     `${photos.length} item${photos.length === 1 ? '' : 's'}`,
+     took && `exported in ${took}`]
       .filter(Boolean).join(' · ');
-  document.getElementById('delete-index-summary').textContent = describeIndices(indicesFor('delete'));
-  document.getElementById('album-index-summary').textContent  = describeIndices(indicesFor('album'));
+  document.getElementById('delete-index-summary').textContent =
+    quickMode ? `${toDelete.length} photo${toDelete.length === 1 ? '' : 's'} matched by filename`
+              : describeIndices(indicesFor('delete'));
+  document.getElementById('album-index-summary').textContent =
+    quickMode ? '' : describeIndices(indicesFor('album'));
+  btnDelete.textContent = quickMode ? 'Preview & Delete via Shortcuts' : 'Delete';
+  document.getElementById('btn-copy').textContent = quickMode ? 'Copy filenames' : 'Copy delete indices';
+  // Adding to an album by position is meaningless without an export.
+  document.getElementById('btn-album-shortcut').style.display = quickMode ? 'none' : '';
+  document.getElementById('btn-copy-album').style.display     = quickMode ? 'none' : '';
 
   confirmTitle.textContent = `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`;
   document.getElementById('stat-kept').textContent  = kept;
@@ -1992,7 +2364,15 @@ function describeIndices(list) {
 }
 
 function buildInput() {
+  if (quickMode) return buildQuickNames('delete');
   return indicesFor('delete').join(',');
+}
+
+// Quick pick fallback: names, newline separated. Deliberately a different shape
+// from the index list so a Shortcut can never confuse one for the other.
+function buildQuickNames(decision) {
+  return [...new Set(photos.filter(p => p.decision === decision).map(p => p.name))]
+    .filter(Boolean).join('\n');
 }
 
 function buildAlbumInput() {
@@ -2023,8 +2403,8 @@ btnCopyAlbum.addEventListener('click', () => {
 btnDelete.addEventListener('click', () => {
   const input = buildInput();
   if (!input) return;
-  const url = 'shortcuts://run-shortcut?name=Delete%20Photos%20By%20Index&input=' + encodeURIComponent(input);
-  window.location.href = url;
+  const name = quickMode ? 'Quick%20Delete%20By%20Name' : 'Delete%20Photos%20By%20Index';
+  window.location.href = `shortcuts://run-shortcut?name=${name}&input=` + encodeURIComponent(input);
 });
 
 const btnCopy = document.getElementById('btn-copy');
@@ -2057,6 +2437,7 @@ document.getElementById('btn-reswipe').addEventListener('click', () => {
 btnRestart.addEventListener('click', () => {
   releasePhotos();
   manifest = null;
+  quickMode = false;
   index = 0;
   decisionStack = [];
   stripThumbs.length = 0;
@@ -2066,6 +2447,25 @@ btnRestart.addEventListener('click', () => {
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/photo-curator/sw.js');
+}
+
+// ── Test hook ───────────────────────────────────────────
+// Only with ?test in the URL, so the shipped app has no extra surface. The suite
+// in test/ drives the real functions rather than a copy of them.
+if (new URLSearchParams(location.search).has('test')) {
+  window.__pc = {
+    validateSelection, startSession, enterSwiper, decide, undo, showConfirm,
+    buildInput, buildAlbumInput, buildQuickNames, indicesFor, parseIndexedName,
+    parseExportDate, exportDuration,
+    normaliseAssetName, isVideoFile, commitStage,
+    get photos() { return photos; },
+    get index() { return index; },
+    get quickMode() { return quickMode; },
+    get manifest() { return manifest; },
+    get stageItems() { return stageItems; },
+    get stagePicked() { return stagePicked; },
+    activeScreen: () => Object.keys(screens).find(k => screens[k].classList.contains('active')),
+  };
 }
 </script>
 </body>
