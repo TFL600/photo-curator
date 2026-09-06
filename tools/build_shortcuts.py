@@ -43,7 +43,11 @@ WINDOW_LIMIT = 400           # hard cap, so a bad run cannot chew through the li
 PHOTO_WIDTH = 800
 VIDEO_SIZE = '960x540'
 # Album name → sidecar kind. The app stages each of these as a grid before swiping.
-CATEGORIES = [('WhatsApp', 'whatsapp'), ('Screenshots', 'screenshot')]
+# Only real albums belong here. "Screenshots" is a smart album, which Find Photos
+# cannot see — asking for it aborts the whole run with "Photo album not found" —
+# so screenshots come from the dedicated action below instead.
+CATEGORIES = [('WhatsApp', 'whatsapp')]
+SCREENSHOT_SCAN = 300   # how many recent screenshots to name in the sidecar
 
 BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build')
 
@@ -116,23 +120,17 @@ def build_export():
     acts += subtract_album(TRIAGE_ALBUM, TRIAGED_ALBUM)
 
     # Category sidecars. Names only — they steer the staging grid in the app and
-    # nothing else, so a filename collision costs a mis-staged thumbnail.
+    # nothing else, so a filename collision costs a mis-staged thumbnail. Names
+    # that match nothing in the export are ignored, so a sidecar may over-list.
     for album_name, kind in CATEGORIES:
         found = uid()
         acts.append(find_photos(found, [album_is(TRIAGE_ALBUM), album_is(album_name)]))
-        vname = f'Names_{kind}'
-        got = uid()
-        acts += repeat_each(out(found, 'Photos'), [
-            action('is.workflow.actions.getitemname', UUID=got, WFInput=var('Repeat Item')),
-            append_var(vname, out(got, 'Name')),
-        ])
-        joined = uid()
-        acts.append(action('is.workflow.actions.text.combine', UUID=joined,
-                           text=var(vname), WFTextSeparator='New Lines'))
-        acts += save_file(
-            f'group-{kind}.txt',
-            text(EXPORT_ROOT + '/{}/group-' + kind + '.txt', var('Stamp')),
-            out(joined, 'Combined Text'))
+        acts += _sidecar(kind, out(found, 'Photos'))
+
+    shots = uid()
+    acts.append(action('is.workflow.actions.getlastscreenshot', UUID=shots,
+                       WFGetLatestPhotoCount=SCREENSHOT_SCAN))
+    acts += _sidecar('screenshot', out(shots, 'Latest Screenshots'))
 
     # The export itself.
     assets = uid()
@@ -199,6 +197,22 @@ def build_export():
         WFInputIsShownAsAttachment=False))
 
     return acts
+
+
+def _sidecar(kind, items):
+    vname = f'Names_{kind}'
+    got = uid()
+    acts = repeat_each(items, [
+        action('is.workflow.actions.getitemname', UUID=got, WFInput=var('Repeat Item')),
+        append_var(vname, out(got, 'Name')),
+    ])
+    joined = uid()
+    acts.append(action('is.workflow.actions.text.combine', UUID=joined,
+                       text=var(vname), WFTextSeparator='New Lines'))
+    return acts + save_file(
+        f'group-{kind}.txt',
+        text(EXPORT_ROOT + '/{}/group-' + kind + '.txt', var('Stamp')),
+        out(joined, 'Combined Text'))
 
 
 def _video_branch(item, name):

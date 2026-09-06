@@ -39,6 +39,8 @@ NO_INPUT_OK = {
     'is.workflow.actions.date', 'is.workflow.actions.gettext',
     'is.workflow.actions.notification', 'is.workflow.actions.showresult',
     'is.workflow.actions.filter.photos', 'is.workflow.actions.number',
+    # Sources its own items from the photo library rather than from the flow.
+    'is.workflow.actions.getlastscreenshot',
 }
 
 

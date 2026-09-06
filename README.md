@@ -33,6 +33,7 @@ deterministically ordered album.
      2_IMG_2179.MOV.mp4       video, re-encoded to 960x540 — still a video, so you can watch it
      3_IMG_5192.HEIC.jpg
      group-whatsapp.txt       original names of the WhatsApp items, one per line
+     group-screenshot.txt     same, from Get Latest Screenshots
      manifest.json
    ```
 
