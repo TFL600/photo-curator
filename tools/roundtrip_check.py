@@ -26,11 +26,24 @@ DB = os.path.expanduser('~/Library/Shortcuts/Shortcuts.sqlite')
 
 
 def stored_actions(name):
+    """The newest shortcut with this name, plus how many share it.
+
+    Deleting a shortcut on the phone does not remove the row here until iCloud
+    catches up, so a re-import leaves two rows with the same name. Taking the
+    first one silently compares against the version that was just replaced.
+    Duplicates matter beyond this check: the app opens shortcuts by name, so two
+    live rows means the app may run either one.
+    """
     db = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
-    row = db.execute('select ZACTIONS from ZSHORTCUT where ZNAME = ?', (name,)).fetchone()
-    if row is None:
+    rows = db.execute(
+        'select ZACTIONS from ZSHORTCUT where ZNAME = ? '
+        'order by ZMODIFICATIONDATE desc', (name,)).fetchall()
+    if not rows:
         return None
-    data = row[0]
+    if len(rows) > 1:
+        print(f'note: {len(rows)} shortcuts named {name!r}; checking the newest. '
+              f'Confirm only one is on the phone — the app opens them by name.')
+    data = rows[0][0]
     if isinstance(data, int):
         row = db.execute('select ZDATA from ZSHORTCUTACTIONS where Z_PK = ?', (data,)).fetchone()
         if row is None:
