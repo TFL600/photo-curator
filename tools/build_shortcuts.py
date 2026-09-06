@@ -127,25 +127,19 @@ def clear_album(album_name):
         remove_each_from_album(out(u, 'Photos'), album_name)
 
 
-def format_date(source, fmt):
-    u = uid()
-    return u, action('is.workflow.actions.format.date', UUID=u, WFDate=source,
-                     WFDateFormatStyle='Custom', WFDateFormat=fmt)
-
-
 # ── 1. Photo Curator Export ─────────────────────────────────
 def build_export():
     acts = []
 
+    # No Format Date anywhere. Its WFDateFormatStyle / WFDateFormat pair survives
+    # import intact and still produced an empty string on the phone, so every
+    # timestamp downstream of it came out blank. Raw date tokens render as a
+    # localised string, which is good enough to read; the app displays whatever
+    # it is given and only computes a duration when it can parse both ends.
     started = uid()
     acts.append(action('is.workflow.actions.date', UUID=started,
                        WFDateActionMode='Current Date'))
-    stamp_u, stamp_act = format_date(out(started, 'Date'), 'yyyy-MM-dd-HHmm')
-    acts.append(stamp_act)
-    acts.append(set_var('Stamp', out(stamp_u, 'Formatted Date')))
-    started_u, started_act = format_date(out(started, 'Date'), 'yyyy-MM-dd HH:mm:ss')
-    acts.append(started_act)
-    acts.append(set_var('StartedAt', out(started_u, 'Formatted Date')))
+    acts.append(set_var('StartedAt', out(started, 'Date')))
 
     # Rebuild the working album: window, minus anything already triaged.
     acts += clear_album(TRIAGE_ALBUM)
@@ -154,6 +148,30 @@ def build_export():
                             order='Oldest First', limit=WINDOW_LIMIT))
     acts += add_each_to_album(out(recent, 'Photos'), TRIAGE_ALBUM)
     acts += subtract_album(TRIAGE_ALBUM, TRIAGED_ALBUM)
+
+    # The export folder has to be new every run: a folder cannot be cleared from a
+    # Shortcut (Get Contents of Folder needs a security-scoped bookmark that only a
+    # picker can create), so writing into a shared folder leaves stale files from a
+    # larger previous export behind. Name it from the item count and the first
+    # asset's name, both of which are already to hand and are path-safe. Asset
+    # names turn out to be UUIDs, which makes collisions a non-issue.
+    setu = uid()
+    acts.append(find_triage(setu))
+    acts.append(set_var('Assets', out(setu, 'Photos')))
+    countu = uid()
+    acts.append(action('is.workflow.actions.count', UUID=countu,
+                       Input=var('Assets'), WFCountType='Items'))
+    acts.append(set_var('Total', out(countu, 'Count')))
+    firstu, firstn = uid(), uid()
+    acts.append(action('is.workflow.actions.getitemfromlist', UUID=firstu,
+                       WFInput=var('Assets'), WFItemSpecifier='First Item'))
+    acts.append(action('is.workflow.actions.getitemname', UUID=firstn,
+                       WFInput=out(firstu, 'Item from List')))
+    acts.append(set_var('First', out(firstn, 'Name')))
+    stampu = uid()
+    acts.append(action('is.workflow.actions.gettext', UUID=stampu,
+                       WFTextActionText=text('{}-{}', var('Total'), var('First'))))
+    acts.append(set_var('Stamp', out(stampu, 'Text')))
 
     # Category sidecars. Names only — they steer the staging grid in the app and
     # nothing else, so a filename collision costs a mis-staged thumbnail. Names
@@ -168,39 +186,32 @@ def build_export():
                        WFGetLatestPhotoCount=SCREENSHOT_SCAN))
     acts += _sidecar('screenshot', out(shots, 'Latest Screenshots'))
 
-    # The export itself.
-    assets = uid()
-    acts.append(find_triage(assets))
-    acts.append(set_var('Assets', out(assets, 'Photos')))
-    counted = uid()
-    acts.append(action('is.workflow.actions.count', UUID=counted,
-                       Input=var('Assets'), WFCountType='Items'))
-    acts.append(set_var('Total', out(counted, 'Count')))
-
+    # The export itself. Assets and Total were captured above, before the sidecars,
+    # and nothing since has touched the album.
     item = uid()
     name = uid()
+    kind = uid()
     body = [
         action('is.workflow.actions.getitemfromlist', UUID=item, WFInput=var('Assets'),
                WFItemSpecifier='Item At Index', WFItemIndex=var('Repeat Index')),
         action('is.workflow.actions.getitemname', UUID=name, WFInput=out(item, 'Item from List')),
+        action('is.workflow.actions.getitemtype', UUID=kind, WFInput=out(item, 'Item from List')),
     ]
+    # Not the filename: Get Name returns the asset's UUID, with no extension at
+    # all, so a contains-".MOV" test could never match and every video was being
+    # flattened to a poster-frame JPEG. Branch on the item's type instead, and
+    # cover both words a video type might use.
     body += if_contains(
-        out(name, 'Name'), 'MOV',
+        out(kind, 'Type'), 'Movie',
         _video_branch(item, name),
-        # Screen recordings land as MP4 rather than MOV, so the same branch again
-        # rather than one condition that has to match both.
-        if_contains(out(name, 'Name'), 'MP4',
+        if_contains(out(kind, 'Type'), 'Video',
                     _video_branch(item, name),
                     _photo_branch(item, name)))
     acts += repeat_count(var('Total'), body)
 
     # manifest.json
-    first_i, first_n, last_i, last_n = uid(), uid(), uid(), uid()
+    last_i, last_n = uid(), uid()
     acts += [
-        action('is.workflow.actions.getitemfromlist', UUID=first_i, WFInput=var('Assets'),
-               WFItemSpecifier='First Item'),
-        action('is.workflow.actions.getitemname', UUID=first_n,
-               WFInput=out(first_i, 'Item from List')),
         action('is.workflow.actions.getitemfromlist', UUID=last_i, WFInput=var('Assets'),
                WFItemSpecifier='Last Item'),
         action('is.workflow.actions.getitemname', UUID=last_n,
@@ -208,8 +219,6 @@ def build_export():
     ]
     ended = uid()
     acts.append(action('is.workflow.actions.date', UUID=ended, WFDateActionMode='Current Date'))
-    ended_u, ended_act = format_date(out(ended, 'Date'), 'yyyy-MM-dd HH:mm:ss')
-    acts.append(ended_act)
 
     manifest = uid()
     acts.append(action(
@@ -218,8 +227,8 @@ def build_export():
             '{"album":"' + TRIAGE_ALBUM + '","count":{},"first":"{}","last":"{}",'
             '"startedAt":"{}","exportedAt":"{}","folder":"{}","windowDays":'
             + str(WINDOW_DAYS) + ',"build":"' + BUILD_PLACEHOLDER + '"}',
-            var('Total'), out(first_n, 'Name'), out(last_n, 'Name'),
-            var('StartedAt'), out(ended_u, 'Formatted Date'), var('Stamp'))))
+            var('Total'), var('First'), out(last_n, 'Name'),
+            var('StartedAt'), out(ended, 'Date'), var('Stamp'))))
     acts += save_file('manifest.json',
                       text(EXPORT_ROOT + '/{}/manifest.json', var('Stamp')),
                       out(manifest, 'Text'))
@@ -229,7 +238,7 @@ def build_export():
         WFNotificationActionBody=text(
             'Triage export ready (build ' + BUILD_PLACEHOLDER + '): {} items in {}. '
             'Started {}, finished {}.',
-            var('Total'), var('Stamp'), var('StartedAt'), out(ended_u, 'Formatted Date')),
+            var('Total'), var('Stamp'), var('StartedAt'), out(ended, 'Date')),
         WFNotificationActionTitle='Photo Curator',
         WFInputIsShownAsAttachment=False))
 

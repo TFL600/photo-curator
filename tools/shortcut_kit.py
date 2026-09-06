@@ -104,6 +104,7 @@ KEY_PROVENANCE = {
     'is.workflow.actions.format.date':        ('WFDate', 'loctable: Date (WFDate)'),
     'is.workflow.actions.number':             (None, 'loctable: ${WFNumberActionNumber}'),
     'is.workflow.actions.getlastscreenshot':  (None, 'loctable: Get the latest ${WFGetLatestPhotoCount}'),
+    'is.workflow.actions.getitemtype':        ('WFInput', 'loctable: Get type of ${WFInput}'),
 }
 
 

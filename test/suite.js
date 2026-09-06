@@ -339,6 +339,39 @@ export async function run() {
     check('no duration claimed', !/exported in/.test(meta), meta);
   });
 
+  await test('an export whose asset names are UUIDs still loads and stages', async () => {
+    // Get Name returns the asset's UUID on a real library, not IMG_1234.HEIC.
+    const ids = ['1ec281b5-78d0-4b19-9f21-f802e49f3380',
+                 'fe576d67-8e29-4a37-b1c7-b497f8367cc0',
+                 '2053490d-cb44-4e61-9ab1-5a2e32b9e0be'];
+    const files = [];
+    for (let i = 0; i < ids.length; i++) files.push(await photoFile(`${i + 1}_${ids[i]}.jpg`, i * 60));
+    files.push(manifestFile({
+      album: 'Triage', count: 3, first: ids[0], last: ids[2],
+      startedAt: '6 September 2026 at 22:16', exportedAt: '6 September 2026 at 22:18',
+    }));
+    files.push(textFile('group-whatsapp.txt', ids[1]));
+    const res = await pc.validateSelection(files);
+    check('no errors', !res.errors, errorText(res));
+    eq('names parsed whole', res.entries.map(e => e.name), ids);
+    eq('sidecar matched a UUID', res.entries.map(e => e.kind || null), [null, 'whatsapp', null]);
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    eq('staged', pc.activeScreen(), 'stage');
+  });
+
+  await test('a localised date string is shown as-is, with no invented duration', async () => {
+    const files = await goodExport(2, {
+      startedAt: '6 September 2026 at 22:16', exportedAt: '6 September 2026 at 22:18',
+    });
+    const res = await pc.validateSelection(files);
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.showConfirm();
+    eq('shown verbatim', document.getElementById('export-when').textContent,
+       '6 September 2026 at 22:18');
+    const meta = document.getElementById('export-meta').textContent;
+    check('no duration claimed', !/exported in/.test(meta), meta);
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,
