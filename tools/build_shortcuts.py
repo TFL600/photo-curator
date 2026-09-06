@@ -22,7 +22,10 @@ different assets and nothing downstream can tell.
 """
 
 import argparse
+import copy
+import hashlib
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -50,6 +53,39 @@ CATEGORIES = [('WhatsApp', 'whatsapp')]
 SCREENSHOT_SCAN = 300   # how many recent screenshots to name in the sidecar
 
 BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build')
+
+# Every export stamps the build it came from into the manifest and the finish
+# notification. Importing a shortcut whose name already exists does not replace
+# it — Shortcuts keeps both and suffixes one — so several builds can sit in the
+# library at once looking identical. The stamp is how you tell which one ran.
+# Exactly 8 characters, so substituting it cannot shift any text token offset.
+BUILD_PLACEHOLDER = 'BUILDID0'
+
+
+def stamp_build_id(actions):
+    """Replace the placeholder with a hash of the logic, ignoring UUIDs."""
+    skeleton = copy.deepcopy(actions)
+
+    def strip(v):
+        if isinstance(v, dict):
+            return {k: strip(x) for k, x in v.items()
+                    if k not in ('UUID', 'OutputUUID', 'GroupingIdentifier')}
+        if isinstance(v, list):
+            return [strip(x) for x in v]
+        return v
+
+    digest = hashlib.sha256(plistlib.dumps(strip(skeleton))).hexdigest()[:8]
+
+    def put(v):
+        if isinstance(v, dict):
+            return {k: put(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [put(x) for x in v]
+        if isinstance(v, str):
+            return v.replace(BUILD_PLACEHOLDER, digest)
+        return v
+
+    return put(actions), digest
 
 
 # ── Reusable fragments ──────────────────────────────────────
@@ -181,7 +217,7 @@ def build_export():
         WFTextActionText=text(
             '{"album":"' + TRIAGE_ALBUM + '","count":{},"first":"{}","last":"{}",'
             '"startedAt":"{}","exportedAt":"{}","folder":"{}","windowDays":'
-            + str(WINDOW_DAYS) + '}',
+            + str(WINDOW_DAYS) + ',"build":"' + BUILD_PLACEHOLDER + '"}',
             var('Total'), out(first_n, 'Name'), out(last_n, 'Name'),
             var('StartedAt'), out(ended_u, 'Formatted Date'), var('Stamp'))))
     acts += save_file('manifest.json',
@@ -191,7 +227,8 @@ def build_export():
     acts.append(action(
         'is.workflow.actions.notification',
         WFNotificationActionBody=text(
-            'Triage export ready: {} items in {}. Started {}, finished {}.',
+            'Triage export ready (build ' + BUILD_PLACEHOLDER + '): {} items in {}. '
+            'Started {}, finished {}.',
             var('Total'), var('Stamp'), var('StartedAt'), out(ended_u, 'Formatted Date')),
         WFNotificationActionTitle='Photo Curator',
         WFInputIsShownAsAttachment=False))
@@ -385,10 +422,11 @@ def main():
     built = {}
     for name, fn in SHORTCUTS.items():
         acts, types = fn()
+        acts, digest = stamp_build_id(acts)
         path = os.path.join(BUILD_DIR, name.replace(' ', '_') + '.plist.shortcut')
         write_shortcut(path, acts, types=types)
         built[name] = (path, acts)
-        print(f'built  {name}: {len(acts)} actions -> {path}')
+        print(f'built  {name}: {len(acts)} actions, build {digest} -> {path}')
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from verify_shortcuts import verify_all

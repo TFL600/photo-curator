@@ -35,15 +35,25 @@ def stored_actions(name):
     live rows means the app may run either one.
     """
     db = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
+    # Importing over an existing name does not replace it: Shortcuts keeps both and
+    # suffixes one of them, and which one gets the clean name is not predictable.
+    # So look for "Name" and "Name 1", "Name 2", ... together.
     rows = db.execute(
-        'select ZACTIONS from ZSHORTCUT where ZNAME = ? '
-        'order by ZMODIFICATIONDATE desc', (name,)).fetchall()
+        "select ZNAME, ZACTIONS from ZSHORTCUT where ZNAME = ? or ZNAME glob ? "
+        "order by ZMODIFICATIONDATE desc", (name, name + ' [0-9]*')).fetchall()
     if not rows:
         return None
     if len(rows) > 1:
-        print(f'note: {len(rows)} shortcuts named {name!r}; checking the newest. '
-              f'Confirm only one is on the phone — the app opens them by name.')
-    data = rows[0][0]
+        others = ', '.join(repr(r[0]) for r in rows)
+        print(f'STALE COPIES: {len(rows)} shortcuts match {name!r} — {others}. '
+              f'Delete all of them and import once; the app opens shortcuts by '
+              f'name and older copies are easy to tap by mistake.')
+    # Compare against the copy holding the exact name, because that is the one the
+    # app will open. Not the most recently modified one: renaming a shortcut bumps
+    # its modification date, so the copy Shortcuts just pushed aside to make room
+    # for the new import looks newest of all.
+    exact = [r for r in rows if r[0] == name]
+    data = (exact or rows)[0][1]
     if isinstance(data, int):
         row = db.execute('select ZDATA from ZSHORTCUTACTIONS where Z_PK = ?', (data,)).fetchone()
         if row is None:
@@ -79,6 +89,28 @@ def diff(name, mine, theirs):
     return problems
 
 
+def _report_build_ids():
+    """Print the build stamp baked into each stored copy.
+
+    Two copies of a shortcut look identical in the library. The stamp is the only
+    way to tell, from here or from the finish notification, which one actually ran.
+    """
+    db = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
+    import re
+    for zname, acts in db.execute(
+            "select ZNAME, ZACTIONS from ZSHORTCUT where ZNAME glob 'Photo Curator Export*' "
+            "order by ZMODIFICATIONDATE"):
+        data = acts
+        if isinstance(data, int):
+            row = db.execute('select ZDATA from ZSHORTCUTACTIONS where Z_PK = ?', (data,)).fetchone()
+            data = row[0] if row else None
+        if data is None:
+            continue
+        blob = str(plistlib.loads(bytes(data)))
+        found = set(re.findall(r'build ([0-9a-f]{8})', blob))
+        print(f'  {zname!r}: build {", ".join(sorted(found)) or "unstamped (older build)"}')
+
+
 def main():
     if not os.path.exists(DB):
         print(f'no Shortcuts database at {DB}')
@@ -93,6 +125,7 @@ def main():
         total += diff(name, mine, theirs)
     for name in missing:
         print(f'not imported yet: {name}')
+    _report_build_ids()
     for p in total:
         print(p)
     if not total and not missing:
