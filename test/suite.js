@@ -198,7 +198,7 @@ export async function run() {
     ];
     const res = await pc.validateSelection(files);
     check('no errors', !res.errors, errorText(res));
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     eq('second item is a video', pc.photos.map(p => p.type), ['image', 'video']);
     eq('no staging, straight to swiper', pc.activeScreen(), 'swiper');
   });
@@ -207,7 +207,7 @@ export async function run() {
     const files = await goodExport(5);
     files.push(textFile('group-whatsapp.txt', 'IMG_1002.HEIC\nIMG_1003.HEIC\nIMG_1005.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     eq('staging screen', pc.activeScreen(), 'stage');
     eq('3 items staged', pc.stageItems.length, 3);
     eq('grid cells rendered', document.querySelectorAll('#stage-grid .stage-cell').length, 3);
@@ -218,7 +218,7 @@ export async function run() {
     const files = await goodExport(5);
     files.push(textFile('group-whatsapp.txt', 'IMG_1002.HEIC\nIMG_1003.HEIC\nIMG_1005.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     // Tap the middle one.
     document.querySelectorAll('#stage-grid .stage-cell')[1].click();
     eq('one picked', pc.stagePicked.size, 1);
@@ -233,7 +233,7 @@ export async function run() {
     const files = await goodExport(4);
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     document.getElementById('btn-stage-all').click();
     eq('now swiping', pc.activeScreen(), 'swiper');
     eq('nothing decided', pc.photos.filter(p => p.decision).length, 0);
@@ -244,7 +244,7 @@ export async function run() {
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC'));
     files.push(textFile('group-screenshot.txt', 'IMG_1004.HEIC\nIMG_1005.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     eq('whatsapp first', document.getElementById('stage-title').textContent, 'WhatsApp');
     pc.commitStage();
     eq('screenshots second', document.getElementById('stage-title').textContent, 'Screenshots');
@@ -259,7 +259,7 @@ export async function run() {
     const files = await goodExport(2);
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.commitStage();
     eq('confirm screen', pc.activeScreen(), 'confirm');
     eq('delete string', pc.buildInput(), '1,2');
@@ -267,7 +267,7 @@ export async function run() {
 
   await test('index strings are sorted, deduped and comma separated', async () => {
     const res = await pc.validateSelection(await goodExport(5));
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.photos[4].decision = 'delete';
     pc.photos[0].decision = 'delete';
     pc.photos[2].decision = 'delete';
@@ -276,44 +276,11 @@ export async function run() {
     eq('album', pc.buildAlbumInput(), '2');
   });
 
-  await test('quick pick can sort but offers no way to delete', async () => {
-    const entries = [
-      { file: await photoFile('IMG_0007.jpg', 10), idx: null, name: 'IMG_0007.jpg' },
-      { file: await photoFile('IMG_0008.jpg', 90), idx: null, name: 'IMG_0008.jpg' },
-    ];
-    pc.startSession(entries, null, { quick: true });
-    eq('quick mode on', pc.quickMode, true);
-    eq('no manifest', pc.manifest, null);
-    eq('straight to swiping', pc.activeScreen(), 'swiper');
-    pc.photos[1].decision = 'delete';
-    pc.showConfirm();
-    eq('quick warning shown', document.getElementById('quick-note').style.display, '');
-    eq('export banner hidden', document.getElementById('export-banner').style.display, 'none');
-    eq('album shortcut hidden', document.getElementById('btn-album-shortcut').style.display, 'none');
-    // A filename list must never reach a Shortcut: matching by name resolved 40
-    // names to 120 arbitrary assets on a real library.
-    eq('no delete button at all', document.getElementById('btn-delete').style.display, 'none');
-    check('and it points at the safe route',
-      /Curate Selected/.test(document.getElementById('quick-note').textContent),
-      document.getElementById('quick-note').textContent);
-  });
-
-  await test('quick pick with an empty delete pile still offers nothing', async () => {
-    const entries = [{ file: await photoFile('IMG_1.jpg'), idx: null, name: 'IMG_1.jpg' }];
-    pc.startSession(entries, null, { quick: true });
-    pc.photos[0].decision = 'keep';
-    pc.showConfirm();
-    const btn = document.getElementById('btn-delete');
-    eq('hidden', btn.style.display, 'none');
-    check('not styled as the finish button', !btn.classList.contains('btn-finish'), btn.className);
-  });
-
   await test('an export session restores the index-based confirm screen', async () => {
     const res = await pc.validateSelection(await goodExport(3));
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.photos[0].decision = 'delete';
     pc.showConfirm();
-    eq('quick warning hidden', document.getElementById('quick-note').style.display, 'none');
     eq('export banner shown', document.getElementById('export-banner').style.display, '');
     eq('delete button', document.getElementById('btn-delete').textContent, 'Delete');
     eq('index summary', document.getElementById('delete-index-summary').textContent, '1 index · #1');
@@ -333,7 +300,7 @@ export async function run() {
   await test('the confirm banner reports how long the export took', async () => {
     const files = await goodExport(2, { startedAt: '2026-09-06 09:00:00', exportedAt: '2026-09-06 09:01:12' });
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.showConfirm();
     const meta = document.getElementById('export-meta').textContent;
     check('shows the duration', /exported in 1m 12s/.test(meta), meta);
@@ -347,7 +314,7 @@ export async function run() {
     ];
     const res = await pc.validateSelection(files);
     check('no errors', !res.errors, errorText(res));
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.showConfirm();
     const meta = document.getElementById('export-meta').textContent;
     check('no duration claimed', !/exported in/.test(meta), meta);
@@ -369,7 +336,7 @@ export async function run() {
     check('no errors', !res.errors, errorText(res));
     eq('names parsed whole', res.entries.map(e => e.name), ids);
     eq('sidecar matched a UUID', res.entries.map(e => e.kind || null), [null, 'whatsapp', null]);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     eq('staged', pc.activeScreen(), 'stage');
   });
 
@@ -378,7 +345,7 @@ export async function run() {
       startedAt: '6 September 2026 at 22:16', exportedAt: '6 September 2026 at 22:18',
     });
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.showConfirm();
     eq('shown verbatim', document.getElementById('export-when').textContent,
        '6 September 2026 at 22:18');
@@ -399,7 +366,7 @@ export async function run() {
     const files = await goodExport(10);
     files.push(textFile('group-screenshot.txt', 'IMG_1003.HEIC\nIMG_1004.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     const sub = document.getElementById('stage-sub').textContent;
     check('reports 2 of 10', /^2 of 10 items/.test(sub), sub);
   });
@@ -408,7 +375,7 @@ export async function run() {
     const files = await goodExport(8);
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC\nIMG_1003.HEIC\nIMG_1004.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     const go = document.getElementById('btn-stage-go');
     const all = document.getElementById('btn-stage-all');
     eq('nothing tapped is stated as a deletion', go.textContent, 'Delete all 4');
@@ -456,7 +423,7 @@ export async function run() {
     eq('6 screenshots', res.entries.filter(e => e.kind === 'screenshot').length, 6);
     eq('nothing untagged', res.entries.filter(e => !e.kind).length, 0);
 
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     eq('whatsapp staged first', document.getElementById('stage-title').textContent, 'WhatsApp');
     eq('covers 11 of 17', document.getElementById('stage-sub').textContent.startsWith('11 of 17 items'), true);
     pc.commitStage();
@@ -469,7 +436,7 @@ export async function run() {
 
   await test('a batch with nothing to delete still offers to record itself', async () => {
     const res = await pc.validateSelection(await goodExport(3));
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.photos.forEach(p => { p.decision = 'keep'; });
     pc.showConfirm();
     const btn = document.getElementById('btn-delete');
@@ -481,7 +448,7 @@ export async function run() {
 
   await test('with something to delete it is the delete button again', async () => {
     const res = await pc.validateSelection(await goodExport(3));
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     pc.photos[0].decision = 'delete';
     pc.photos[1].decision = 'keep';
     pc.showConfirm();
@@ -499,7 +466,7 @@ export async function run() {
     eq('companion is not an item of its own', res.entries.length, 3);
     eq('paired to index 2', res.entries.map(e => !!e.videoFile), [false, true, false]);
 
-    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.startSession(res.entries, res.manifest);
     eq('types', pc.photos.map(p => p.type), ['image', 'video', 'image']);
     const v = pc.photos[1];
     check('media url is the video', v.url !== v.poster, `${v.url} vs ${v.poster}`);

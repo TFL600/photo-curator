@@ -580,10 +580,12 @@ SHORTCUTS = {
     'Delete Photos By Index': build_delete,
     'Add Photos To Album By Index': build_add_to_album,
     'Mark Batch Triaged': build_mark_triaged,
-    'Curate Selected': build_export_selected,
 }
-# Quick Delete By Name is deliberately not built any more. Filename matching cannot
-# be made safe, and Curate Selected covers the same need through the album.
+# Two routes were tried for hand-picked photos and neither is built any more.
+# Quick Delete By Name matched filenames, which cannot be made safe. Curate
+# Selected replaced it via the share sheet and worked on paper, but the export
+# already covers the need: it takes seconds, so there is nothing a separate
+# hand-picked path buys. One way in is worth more than a second way in.
 
 
 

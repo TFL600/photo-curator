@@ -320,7 +320,7 @@
       color: var(--text-light);
     }
 
-    #file-input, #quick-input { display: none; }
+    #file-input { display: none; }
 
     /* ── SWIPER ── */
     #screen-swiper {
@@ -1027,14 +1027,7 @@
     .stage-actions { display: flex; gap: 10px; }
     .stage-actions button { flex: 1; }
 
-    /* ── LANDING: two ways in ── */
-    .landing-buttons {
-      width: 100%;
-      max-width: 340px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
+    /* Shared by the staging screen's secondary action. */
     .btn-secondary {
       width: 100%;
       padding: 15px 20px;
@@ -1049,21 +1042,6 @@
       box-shadow: var(--shadow-sm);
     }
     .btn-secondary:active { transform: scale(0.985); }
-    .btn-danger.btn-finish {
-      background: var(--keep);
-    }
-    .quick-note {
-      margin: 0 0 14px;
-      padding: 12px 14px;
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--delete);
-      border-radius: var(--radius-md);
-      background: var(--card);
-      font-size: 13px;
-      line-height: 1.45;
-      color: var(--text-light);
-    }
-    .quick-note b { color: var(--text); }
   </style>
 </head>
 <body>
@@ -1103,17 +1081,11 @@
     <div id="load-error-diag"></div>
     <p class="load-error-hint">Indices only mean anything against the exact export they came from, so nothing was loaded. Re-run the export Shortcut and select the whole folder, <code>manifest.json</code> included.</p>
   </div>
-  <div class="landing-buttons">
-    <button class="btn-primary" id="btn-select">Open Export Folder</button>
-    <button class="btn-secondary" id="btn-quick">Pick a few photos</button>
-  </div>
-  <!-- No accept filter on the export input: iOS maps accept="application/json"/.json
-       to a UTType inconsistently and greys out manifest.json in the Files picker, which
-       makes the export folder impossible to select. Type checking happens in the guard. -->
+  <button class="btn-primary" id="btn-select">Open Export Folder</button>
+  <!-- No accept filter: iOS maps accept="application/json"/.json to a UTType
+       inconsistently and greys out manifest.json in the Files picker, which makes the
+       export folder impossible to select. Type checking happens in the guard. -->
   <input type="file" id="file-input" multiple>
-  <!-- Quick input: accept limits the sheet to media, which is the closest iOS lets a
-       web page get to opening the photo library directly. -->
-  <input type="file" id="quick-input" accept="image/*,video/*" multiple>
 </div>
 
 <!-- STAGE: grid pre-pass for one category -->
@@ -1194,14 +1166,6 @@
     <h2 class="confirm-title" id="confirm-title">Review</h2>
   </div>
 
-  <div class="quick-note" id="quick-note" style="display:none">
-    <b>Quick pick can't delete.</b> Photos chosen by hand have no export position, so the
-    only way to name them to a Shortcut is by filename — and filenames match the wrong
-    assets. Sort them here to decide, then in <b>Photos</b> select them, tap
-    <b>Share</b> and choose <b>Curate Selected</b>. That routes them through the album,
-    where positions work and deleting is safe.
-  </div>
-
   <div class="export-banner" id="export-banner">
     <div class="export-banner-label">Export taken</div>
     <div class="export-banner-when" id="export-when">—</div>
@@ -1259,9 +1223,6 @@ let decisionStack = []; // indices of decided photos in order (for undo)
 const stripThumbs = []; // DOM refs indexed by photo index
 let sessionPlaybackRate = 1;
 let sessionMuted = false;
-// Quick pick: photos chosen by hand from the library. No manifest, no export
-// positions, so nothing downstream may claim index identity for them.
-let quickMode = false;
 
 // ── Last session reminder ───────────────────────────────
 (function() {
@@ -1294,9 +1255,7 @@ const screens = {
 };
 
 const fileInput        = document.getElementById('file-input');
-const quickInput       = document.getElementById('quick-input');
 const btnSelect        = document.getElementById('btn-select');
-const btnQuick         = document.getElementById('btn-quick');
 const photoContainer   = document.getElementById('photo-container');
 const photoImg         = document.getElementById('photo-img');
 const photoVideo       = document.getElementById('photo-video');
@@ -1614,7 +1573,7 @@ function hideLoadError() {
 }
 
 function resetSelectButton() {
-  btnSelect.innerHTML = 'Select Export Folder';
+  btnSelect.innerHTML = 'Open Export Folder';
   btnSelect.classList.remove('loading');
   btnSelect.disabled = false;
 }
@@ -1629,10 +1588,9 @@ function releasePhotos() {
 
 // entries are already in the order that defines identity: for an export that is
 // ascending index, for a quick pick it is only the order the picker handed them over.
-function startSession(entries, mf, opts) {
+function startSession(entries, mf) {
   releasePhotos();
   manifest = mf;
-  quickMode = !!(opts && opts.quick);
   index = 0;
   hintsShown = false;
   decisionStack = [];
@@ -1680,7 +1638,6 @@ function enterSwiper() {
 }
 
 btnSelect.addEventListener('click', () => fileInput.click());
-btnQuick.addEventListener('click', () => quickInput.click());
 
 fileInput.addEventListener('change', async () => {
   const files = Array.from(fileInput.files);
@@ -1696,26 +1653,7 @@ fileInput.addEventListener('change', async () => {
   resetSelectButton();
   if (result.errors) { showLoadError(result.errors, result.diag); return; }
 
-  startSession(result.entries, result.manifest, { quick: false });
-});
-
-// Quick pick has no manifest and no guard: there is nothing to guard, because
-// nothing here is addressed by position. The only check is that it is media.
-quickInput.addEventListener('change', () => {
-  const files = Array.from(quickInput.files);
-  quickInput.value = '';
-  if (!files.length) return;
-
-  hideLoadError();
-  const media = files.filter(isMediaFile);
-  if (!media.length) {
-    showLoadError(['Nothing in that selection is a photo or a video.'], null);
-    return;
-  }
-  const skipped = files.length - media.length;
-  const entries = media.map(file => ({ file, idx: null, name: file.name }));
-  startSession(entries, null, { quick: true });
-  if (skipped) console.warn(`quick pick: skipped ${skipped} non-media file(s)`);
+  startSession(result.entries, result.manifest);
 });
 
 // ── Staging (grid pre-pass) ─────────────────────────────
@@ -2065,7 +2003,6 @@ function undo() {
 }
 
 function sessionLabel() {
-  if (quickMode) return `Quick pick · ${formatExportedAt(new Date().toISOString())}`;
   if (!manifest) return '';
   const when = formatExportedAt(manifest.exportedAt);
   const album = manifest.album ? String(manifest.album) : 'Export';
@@ -2333,8 +2270,6 @@ function showConfirm() {
 
   // Indices are only valid against the album as it stood at export time — the
   // one failure mode the manifest guard cannot detect. Say when that was.
-  document.getElementById('quick-note').style.display    = quickMode ? '' : 'none';
-  document.getElementById('export-banner').style.display = quickMode ? 'none' : '';
   const when = formatExportedAt(manifest?.exportedAt);
   document.getElementById('export-when').textContent = when || 'Unknown';
   const took = exportDuration(manifest);
@@ -2343,18 +2278,11 @@ function showConfirm() {
      `${photos.length} item${photos.length === 1 ? '' : 's'}`,
      took && `exported in ${took}`]
       .filter(Boolean).join(' · ');
-  document.getElementById('delete-index-summary').textContent =
-    quickMode ? `${toDelete.length} photo${toDelete.length === 1 ? '' : 's'} matched by filename`
-              : describeIndices(indicesFor('delete'));
-  document.getElementById('album-index-summary').textContent =
-    quickMode ? '' : describeIndices(indicesFor('album'));
-  // Nothing in quick pick can be deleted, so there is no button that would do it.
+  document.getElementById('delete-index-summary').textContent = describeIndices(indicesFor('delete'));
+  document.getElementById('album-index-summary').textContent  = describeIndices(indicesFor('album'));
+  document.getElementById('btn-copy').textContent = 'Copy delete indices';
   btnDelete.textContent = 'Delete';
   btnDelete.classList.remove('btn-finish');
-  document.getElementById('btn-copy').textContent = quickMode ? 'Copy filenames' : 'Copy delete indices';
-  // Adding to an album by position is meaningless without an export.
-  document.getElementById('btn-album-shortcut').style.display = quickMode ? 'none' : '';
-  document.getElementById('btn-copy-album').style.display     = quickMode ? 'none' : '';
 
   confirmTitle.textContent = `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`;
   document.getElementById('stat-kept').textContent  = kept;
@@ -2396,12 +2324,11 @@ function showConfirm() {
     // delete Shortcut, so hiding this button when there was nothing to delete meant
     // the batch was never recorded and every photo in it came back on the next
     // export — the exact thing the Triaged album exists to prevent.
-    btnDelete.style.display = quickMode ? 'none' : '';
+    btnDelete.style.display = '';
     btnDelete.textContent = 'Finish — mark all as triaged';
     btnDelete.classList.add('btn-finish');
-    if (quickMode) btnDelete.classList.remove('btn-finish');
   } else {
-    btnDelete.style.display = quickMode ? 'none' : '';
+    btnDelete.style.display = '';
     btnDelete.classList.remove('btn-finish');
     toDelete.forEach(p => thumbGrid.appendChild(buildThumbItem(p, '✕', null)));
   }
@@ -2431,15 +2358,7 @@ function describeIndices(list) {
 }
 
 function buildInput() {
-  if (quickMode) return buildQuickNames('delete');
   return indicesFor('delete').join(',');
-}
-
-// Quick pick fallback: names, newline separated. Deliberately a different shape
-// from the index list so a Shortcut can never confuse one for the other.
-function buildQuickNames(decision) {
-  return [...new Set(photos.filter(p => p.decision === decision).map(p => p.name))]
-    .filter(Boolean).join('\n');
 }
 
 function buildAlbumInput() {
@@ -2468,10 +2387,6 @@ btnCopyAlbum.addEventListener('click', () => {
 });
 
 btnDelete.addEventListener('click', () => {
-  // Quick pick has no positions, so it has no delete path at all. Nothing here
-  // may fall back to matching by filename: that is what tried to queue 120
-  // arbitrary photos for deletion.
-  if (quickMode) return;
   const input = buildInput();
   if (!input) {
     // Nothing to delete, but the batch still has to be recorded as triaged.
@@ -2512,7 +2427,6 @@ document.getElementById('btn-reswipe').addEventListener('click', () => {
 btnRestart.addEventListener('click', () => {
   releasePhotos();
   manifest = null;
-  quickMode = false;
   index = 0;
   decisionStack = [];
   stripThumbs.length = 0;
@@ -2530,12 +2444,11 @@ if ('serviceWorker' in navigator) {
 if (new URLSearchParams(location.search).has('test')) {
   window.__pc = {
     validateSelection, startSession, enterSwiper, decide, undo, showConfirm,
-    buildInput, buildAlbumInput, buildQuickNames, indicesFor, parseIndexedName,
+    buildInput, buildAlbumInput, indicesFor, parseIndexedName,
     parseExportDate, exportDuration,
     normaliseAssetName, isVideoFile, commitStage,
     get photos() { return photos; },
     get index() { return index; },
-    get quickMode() { return quickMode; },
     get manifest() { return manifest; },
     get stageItems() { return stageItems; },
     get stagePicked() { return stagePicked; },
