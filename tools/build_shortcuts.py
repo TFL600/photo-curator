@@ -32,7 +32,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shortcut_kit import (                                            # noqa: E402
-    action, album_is, append_var, find_photos, if_contains, out, repeat_count,
+    action, album_is, append_var, find_photos, out, repeat_count,
     repeat_each, save_file, set_var, shortcut_input, taken_within_days, text,
     uid, var, write_shortcut,
 )
@@ -370,14 +370,21 @@ def _photo_branch(item, name):
 
 # ── 2. Delete Photos By Index ───────────────────────────────
 def build_delete():
-    """One confirmation for the whole batch, with a per-asset fallback.
+    """One confirmation for the whole batch, and the counts to prove it worked.
 
     Deleting inside the loop costs one system confirmation per photo, which is
     unusable at 70 photos. Deleting an accumulated set is a single atomic
     PHAssetChangeRequest, so one unmaterialisable asset silently fails all of
-    them. So: try the batch, then count the album again. If nothing went, fall
-    back to deleting one at a time — the annoying path, but only when it is the
-    only path that works.
+    them: the dialog appears, the count is reported, nothing is deleted.
+
+    This used to try the batch and fall back to per-asset deletes if the album
+    count had not moved. That fallback was behind an If, and an If never fires
+    here — the legacy condition keys are stored on import and ignored at runtime —
+    so the safety net was dead code that read like protection. It is gone.
+
+    Instead the result names the album count before and after. A batch that
+    silently deleted nothing shows as two equal numbers, which is visible rather
+    than reassuring, and re-running is safe.
     """
     acts = []
     split = uid()
@@ -407,14 +414,7 @@ def build_delete():
     acts.append(action('is.workflow.actions.count', UUID=after_count,
                        Input=out(after_find, 'Photos'), WFCountType='Items'))
 
-    one = uid()
-    fallback = repeat_each(var('Targets'), [
-        action('is.workflow.actions.deletephotos', UUID=one, photos=var('Repeat Item')),
-    ]) + [action('is.workflow.actions.showresult',
-                 Text='The batch delete did nothing, so they were deleted one at a '
-                      'time instead. One of them is probably not downloaded from '
-                      'iCloud.')]
-    acts += if_contains(out(after_count, 'Count'), var('Before'), fallback)
+    acts.append(set_var('After', out(after_count, 'Count')))
 
     # Mark the survivors, so tomorrow's export does not offer them again. Subtract
     # first, so running this twice on the same export cannot re-add a member.
@@ -427,8 +427,11 @@ def build_delete():
     acts.append(action('is.workflow.actions.count', UUID=done,
                        Input=var('Targets'), WFCountType='Items'))
     acts.append(action('is.workflow.actions.showresult',
-                       Text=text('Deleted {} of {} · indices {}',
-                                 out(done, 'Count'), var('Before'), var('Indices'))))
+                       Text=text('Asked to delete {} of {}. Album was {}, now {} — '
+                                 'if those two are equal nothing was deleted, and one '
+                                 'of them is probably not downloaded from iCloud.',
+                                 out(done, 'Count'), var('Before'), var('Before'),
+                                 var('After'))))
     return acts, ['ActionExtension']
 
 

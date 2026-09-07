@@ -1,3 +1,4 @@
 CLAUDE.md
 build/
 __pycache__/
+.fixture-tmp/

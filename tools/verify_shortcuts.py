@@ -18,6 +18,8 @@ What it checks:
   * text token offsets line up with the U+FFFC placeholders in the string
   * no Repeat iterates a library-wide scan, which costs time proportional to the
     photo library rather than to the batch
+  * no If anywhere: conditions are stored on import and ignored at runtime, so a
+    branch reads like logic and behaves like nothing
   * export and delete resolve the same ordered list of assets
 """
 
@@ -90,6 +92,16 @@ def check(actions, name):
 
         if ident not in KNOWN_IDS:
             fail(i, 'identifier not present in WorkflowKit')
+
+        # Conditions do not work in generated shortcuts. WFCondition and
+        # WFConditionalActionString survive import — the round trip reads them
+        # back — and are then ignored when the shortcut runs, so every branch
+        # takes the else path. Proven three ways while trying to split videos from
+        # photos. A dead branch is worse than no branch, because it reads like
+        # protection: the delete shortcut's per-asset fallback sat behind one.
+        if ident == 'is.workflow.actions.conditional':
+            fail(i, 'uses If, which never fires here — restructure so no condition '
+                    'is needed, the way the video pass does')
 
         # ── magic variables must point backwards at a real action ──
         for d in _walk(params):
