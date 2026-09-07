@@ -58,10 +58,10 @@ deterministically ordered album.
 5. On the confirmation screen, tap **Delete**. One system confirmation for the whole
    batch, not one per photo.
 
-There is a second way in — **Pick a few photos** — for when six photos is not worth an
-export. It has no manifest and no positions, so it matches by filename and the Shortcut
-shows you everything it matched in Quick Look before deleting. See below for why that is
-the fallback rather than the default.
+There is deliberately no second way in. Hand-picking photos inside the app was built
+twice and removed twice: without an export there are no positions, and the only way to
+name a photo to a Shortcut without one is by filename — which matches the wrong assets.
+See **Why positions, not filenames** above, and **Filename matching** below.
 
 ## The manifest guard
 
@@ -96,7 +96,7 @@ parameter key does not error, it silently leaves an action's input unbound.
 - **Photo Curator Export** — the daily automation
 - **Delete Photos By Index** — takes `3,7,12`
 - **Add Photos To Album By Index** — takes `3,7,12`, target album `Swipe-album`
-- **Quick Delete By Name** — the hand-picked fallback, preview-first
+- **Mark Batch Triaged** — records a batch kept whole, so it is not offered again
 
 Every one that resolves a position runs the identical `Find Photos` lookup: album
 `Triage`, sorted by Date Taken, oldest first, no limit. That lookup *is* the index space.
@@ -123,6 +123,18 @@ never been verified here.
 No runner, no dependencies. `test/suite.js` runs inside the real page against the real
 functions; the Shortcuts have static checks that do not need a phone. See
 [test/README.md](test/README.md).
+
+## Filename matching
+
+Tried once more, in 2026, for a hand-picked route. It failed worse than the original:
+**the value shape for a `Name` filter does not bind at all.** 40 names against a
+per-name cap of 3 returned exactly 120 assets — the cap times the number of names, which
+is what a filter that has stopped filtering looks like. A non-binding filter does not
+error; `Find Photos` simply returns everything, and `Delete Photos` was the next action.
+The cap is the only reason 120 arbitrary photos were not queued for deletion.
+
+Adding a date condition does not rescue it. `Name is X AND Date Taken is on D` is exactly
+what the original did, and that is the pipeline that resolved 229 names to 257 assets.
 
 ## Known limitation
 
