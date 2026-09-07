@@ -62,6 +62,9 @@ SCREENSHOT_SCAN = 120.0
 # inside the export window can matter, so a shallow scan loses nothing: a video
 # older than this is also older than WINDOW_DAYS and is not in the export.
 VIDEO_SCAN = 60.0
+# Most a single hand-picked name may resolve to. Live Photo pairs and edited
+# copies make a couple plausible; anything more means the filter is not working.
+QUICK_NAME_LIMIT = 3.0
 
 BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build')
 
@@ -478,20 +481,43 @@ def build_quick_delete():
     acts.append(action('is.workflow.actions.text.split', UUID=split,
                        text=shortcut_input(), WFTextSeparator='New Lines'))
     acts.append(set_var('Names', out(split, 'Split Text')))
+    namecount = uid()
+    acts.append(action('is.workflow.actions.count', UUID=namecount,
+                       Input=var('Names'), WFCountType='Items'))
+    acts.append(set_var('Asked', out(namecount, 'Count')))
 
+    # The per-find limit is a blast radius, not an optimisation. The value shape
+    # for a Name filter is the one serialization here that has never been
+    # verified, and a filter that fails to bind does not error — Find Photos just
+    # returns everything. With Delete Photos downstream, an unbound filter would
+    # mean the whole library. QUICK_NAME_LIMIT caps what a single name can
+    # possibly resolve to, so the worst case is bounded by how many names were
+    # asked for rather than by the size of the library.
     found = uid()
     acts += repeat_each(var('Names'), [
         find_photos(found, [{'Operator': 4, 'Property': 'Name', 'Removable': True,
-                             'Values': {'String': var('Repeat Item')}}]),
+                             'Values': {'String': var('Repeat Item')}}],
+                    limit=QUICK_NAME_LIMIT),
         append_var('Matched', out(found, 'Photos')),
     ])
-    acts.append(action('is.workflow.actions.previewdocument', WFInput=var('Matched')))
     counted = uid()
     acts.append(action('is.workflow.actions.count', UUID=counted,
                        Input=var('Matched'), WFCountType='Items'))
+
+    # Say the numbers before showing anything, and before deleting anything. If
+    # the filter is not binding, the match count comes back at the cap times the
+    # number of names rather than roughly the number of names — which is the
+    # signal to stop, and it arrives while stopping is still free.
+    acts.append(action('is.workflow.actions.showresult',
+                       Text=text('{} name(s) asked for, {} asset(s) matched. Names are '
+                                 'not unique, so check the next screen before allowing '
+                                 'the deletion — and cancel if that count looks wrong.',
+                                 var('Asked'), out(counted, 'Count'))))
+    acts.append(action('is.workflow.actions.previewdocument', WFInput=var('Matched')))
     acts.append(action('is.workflow.actions.deletephotos', UUID=uid(), photos=var('Matched')))
     acts.append(action('is.workflow.actions.showresult',
-                       Text=text('Deleted {} matched asset(s).', out(counted, 'Count'))))
+                       Text=text('Deleted {} matched asset(s) for {} name(s).',
+                                 out(counted, 'Count'), var('Asked'))))
     return acts, ['ActionExtension']
 
 
