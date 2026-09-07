@@ -390,6 +390,69 @@ export async function run() {
     check('reports 2 of 10', /^2 of 10 items/.test(sub), sub);
   });
 
+  await test('the staging buttons name what they will do', async () => {
+    const files = await goodExport(8);
+    files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC\nIMG_1003.HEIC\nIMG_1004.HEIC'));
+    const res = await pc.validateSelection(files);
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    const go = document.getElementById('btn-stage-go');
+    const all = document.getElementById('btn-stage-all');
+    eq('nothing tapped is stated as a deletion', go.textContent, 'Delete all 4');
+    check('tally warns', /all <b>4<\/b> would go to the delete pile/.test(
+      document.getElementById('stage-tally').innerHTML),
+      document.getElementById('stage-tally').innerHTML);
+    eq('escape hatch counts too', all.textContent, 'Swipe all 4');
+    document.querySelectorAll('#stage-grid .stage-cell')[0].click();
+    eq('splits once tapped', go.textContent, 'Delete 3, swipe 1');
+    document.querySelectorAll('#stage-grid .stage-cell')[1].click();
+    eq('updates again', go.textContent, 'Delete 2, swipe 2');
+    document.querySelectorAll('#stage-grid .stage-cell')[1].click();
+    eq('untapping reverts', go.textContent, 'Delete 3, swipe 1');
+  });
+
+  await test('replays the real 7 Sep export: 11 WhatsApp UUIDs + 6 named screenshots', async () => {
+    // Taken verbatim from TriageExport/17-2053490d-.../ on the phone. Asset names
+    // are UUIDs for library photos but readable IMG_nnnn for screenshots, and the
+    // one video is an uppercase UUID — none of which was true of the fixtures
+    // written before a real export existed.
+    const wa = ['2053490d-cb2e-4d5e-bea1-5a2e32b9e0be', 'b9f16bab-c935-47c5-acd2-bb6da2986ee2',
+                'e61f47ec-5bd0-47ca-b438-2fd48e86dbf6', 'a6199744-b0d9-48bf-a0fd-a8e91e490760',
+                'c16f7479-618d-4754-8fcf-e85fbfb81df2', '115227e2-23ff-4aa6-8ff2-2865e1c614d9',
+                '1c6d78bf-2ab3-49e3-b654-1a5bc3d8bf3a', '93f75945-2854-4aa7-a2b4-7b0dc3849ad4',
+                '2c421896-ebac-478a-b212-c1667669a686', '214C10D6-D6A9-4CF1-99F1-BE839AB9FF9B',
+                '60071445-c747-4bcc-b458-427b1d8a9775'];
+    const shots = ['IMG_2987', 'IMG_2988', 'IMG_2989', 'IMG_2990', 'IMG_2991', 'IMG_2992'];
+    const names = [...wa, ...shots];
+    const files = [];
+    for (let i = 0; i < names.length; i++) files.push(await photoFile(`${i + 1}_${names[i]}.jpg`, i * 21));
+    files.push(manifestFile({
+      album: 'Triage', count: 17, first: wa[0], last: 'IMG_2992',
+      startedAt: '7 Sep 2026 at 07:34', exportedAt: '7 Sep 2026 at 07:34',
+      folder: '17-' + wa[0], windowDays: 3, build: '7294d8a2',
+    }));
+    files.push(textFile('group-whatsapp.txt', wa.join('\n')));
+    // The real sidecar lists 53 screenshots newest-first; only six are in the export.
+    files.push(textFile('group-screenshot.txt',
+      [...shots].reverse().concat(['IMG_2025', 'IMG_0935', 'IMG_0003']).join('\n')));
+
+    const res = await pc.validateSelection(files);
+    check('accepted', !res.errors, errorText(res));
+    eq('17 items', res.entries.length, 17);
+    eq('11 whatsapp', res.entries.filter(e => e.kind === 'whatsapp').length, 11);
+    eq('6 screenshots', res.entries.filter(e => e.kind === 'screenshot').length, 6);
+    eq('nothing untagged', res.entries.filter(e => !e.kind).length, 0);
+
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    eq('whatsapp staged first', document.getElementById('stage-title').textContent, 'WhatsApp');
+    eq('covers 11 of 17', document.getElementById('stage-sub').textContent.startsWith('11 of 17 items'), true);
+    pc.commitStage();
+    eq('then screenshots', document.getElementById('stage-title').textContent, 'Screenshots');
+    pc.commitStage();
+    // Every item was staged out, so there is nothing left to swipe.
+    eq('straight to confirm', pc.activeScreen(), 'confirm');
+    eq('all 17 marked', pc.indicesFor('delete').length, 17);
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,

@@ -1692,6 +1692,8 @@ const stageGrid   = document.getElementById('stage-grid');
 const stageTitle  = document.getElementById('stage-title');
 const stageSub    = document.getElementById('stage-sub');
 const stageTally  = document.getElementById('stage-tally');
+const btnStageGo  = document.getElementById('btn-stage-go');
+const btnStageAll = document.getElementById('btn-stage-all');
 
 let stageQueue  = [];   // kinds still to be shown
 let stageItems  = [];   // photos in the category on screen
@@ -1761,10 +1763,20 @@ function renderStage(kind, items) {
   showScreen('stage');
 }
 
+// The buttons say what they will do, with live counts. "Continue" did not: with
+// nothing tapped it silently binned the whole category, which reads as the safe
+// option next to a button labelled "Swipe all". Naming the consequence is the fix —
+// a destructive default has to be legible before it is pressed, not after.
 function updateStageTally() {
   const keep = stagePicked.size;
   const drop = stageItems.length - keep;
-  stageTally.innerHTML = `<b>${keep}</b> to swipe · <b>${drop}</b> straight to the delete pile`;
+  stageTally.innerHTML = keep
+    ? `<b>${keep}</b> tapped for a closer look · <b>${drop}</b> not`
+    : `Nothing tapped yet — all <b>${drop}</b> would go to the delete pile`;
+  btnStageGo.textContent = keep
+    ? `Delete ${drop}, swipe ${keep}`
+    : `Delete all ${drop}`;
+  btnStageAll.textContent = `Swipe all ${stageItems.length}`;
 }
 
 function commitStage() {
@@ -1777,8 +1789,8 @@ function commitStage() {
   nextStage();
 }
 
-document.getElementById('btn-stage-go').addEventListener('click', commitStage);
-document.getElementById('btn-stage-all').addEventListener('click', () => {
+btnStageGo.addEventListener('click', commitStage);
+btnStageAll.addEventListener('click', () => {
   // Escape hatch: treat the whole category as ordinary photos.
   stagePicked = new Set(stageItems);
   commitStage();

@@ -57,7 +57,10 @@ CATEGORIES = [('WhatsApp', 'whatsapp')]
 SCREENSHOT_SCAN = 500.0
 # Get Type's exact wording for a video is not known. Test every plausible spelling
 # rather than spend a round trip per guess; diag-types.txt records the real answer.
-VIDEO_TYPE_WORDS = ['Movie', 'Video', 'MP4', 'QuickTime', 'MPEG', 'AVAsset']
+# Lowercase variants too: Contains may well be case sensitive, and a type of
+# "MPEG-4 movie" would then slip past a test for "Movie".
+VIDEO_TYPE_WORDS = ['Movie', 'movie', 'Video', 'video', 'MP4', 'QuickTime',
+                    'MPEG', 'mpeg', 'AVAsset']
 
 BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build')
 
