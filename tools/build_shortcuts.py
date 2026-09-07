@@ -465,12 +465,38 @@ def build_quick_delete():
     return acts, ['ActionExtension']
 
 
+# ── 5. Mark Batch Triaged ───────────────────────────────
+def build_mark_triaged():
+    """Record a whole batch as triaged without deleting anything.
+
+    Marking normally happens inside Delete Photos By Index, which means a batch
+    where nothing was marked for deletion recorded nothing — and the app hid the
+    only button that would have run it. Those photos then came back on the next
+    export, which is the exact complaint the Triaged album exists to fix.
+
+    Takes no input and deletes nothing, so it is safe to run twice: the subtract
+    step means a second run cannot re-add an existing member and hit error 3300.
+    """
+    acts = list(subtract_album(TRIAGE_ALBUM, TRIAGED_ALBUM))
+    survivors = uid()
+    acts.append(find_triage(survivors))
+    acts += add_each_to_album(out(survivors, 'Photos'), TRIAGED_ALBUM)
+    counted = uid()
+    acts.append(action('is.workflow.actions.count', UUID=counted,
+                       Input=out(survivors, 'Photos'), WFCountType='Items'))
+    acts.append(action('is.workflow.actions.showresult',
+                       Text=text('Marked {} as triaged. They will not be offered again.',
+                                 out(counted, 'Count'))))
+    return acts, ['ActionExtension']
+
+
 # ── Driver ──────────────────────────────────────────────────
 SHORTCUTS = {
     'Photo Curator Export': lambda: (build_export(), None),
     'Delete Photos By Index': build_delete,
     'Add Photos To Album By Index': build_add_to_album,
     'Quick Delete By Name': build_quick_delete,
+    'Mark Batch Triaged': build_mark_triaged,
 }
 
 

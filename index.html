@@ -1049,6 +1049,9 @@
       box-shadow: var(--shadow-sm);
     }
     .btn-secondary:active { transform: scale(0.985); }
+    .btn-danger.btn-finish {
+      background: var(--keep);
+    }
     .quick-note {
       margin: 0 0 14px;
       padding: 12px 14px;
@@ -2313,6 +2316,7 @@ function showConfirm() {
   document.getElementById('album-index-summary').textContent =
     quickMode ? '' : describeIndices(indicesFor('album'));
   btnDelete.textContent = quickMode ? 'Preview & Delete via Shortcuts' : 'Delete';
+  btnDelete.classList.remove('btn-finish');
   document.getElementById('btn-copy').textContent = quickMode ? 'Copy filenames' : 'Copy delete indices';
   // Adding to an album by position is meaningless without an export.
   document.getElementById('btn-album-shortcut').style.display = quickMode ? 'none' : '';
@@ -2354,9 +2358,16 @@ function showConfirm() {
   thumbGrid.innerHTML = '';
   if (toDelete.length === 0) {
     thumbGrid.innerHTML = '<div class="empty-state" style="grid-column:1/-1">No photos marked for deletion 🎉</div>';
-    btnDelete.style.display = 'none';
+    // Still offer the finishing move. Marking a batch as triaged happens inside the
+    // delete Shortcut, so hiding this button when there was nothing to delete meant
+    // the batch was never recorded and every photo in it came back on the next
+    // export — the exact thing the Triaged album exists to prevent.
+    btnDelete.style.display = quickMode ? 'none' : '';
+    btnDelete.textContent = 'Finish — mark all as triaged';
+    btnDelete.classList.add('btn-finish');
   } else {
     btnDelete.style.display = '';
+    btnDelete.classList.remove('btn-finish');
     toDelete.forEach(p => thumbGrid.appendChild(buildThumbItem(p, '✕', null)));
   }
 
@@ -2423,7 +2434,12 @@ btnCopyAlbum.addEventListener('click', () => {
 
 btnDelete.addEventListener('click', () => {
   const input = buildInput();
-  if (!input) return;
+  if (!input) {
+    // Nothing to delete, but the batch still has to be recorded as triaged.
+    if (quickMode) return;
+    window.location.href = 'shortcuts://run-shortcut?name=Mark%20Batch%20Triaged';
+    return;
+  }
   const name = quickMode ? 'Quick%20Delete%20By%20Name' : 'Delete%20Photos%20By%20Index';
   window.location.href = `shortcuts://run-shortcut?name=${name}&input=` + encodeURIComponent(input);
 });

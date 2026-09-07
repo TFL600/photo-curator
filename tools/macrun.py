@@ -40,7 +40,9 @@ def sign(actions, name):
     # shortcuts sign refuses an input that is not named .shortcut.
     raw = os.path.join(BUILD_DIR, name.replace(' ', '_') + '.plist.shortcut')
     signed = os.path.join(BUILD_DIR, name + '.shortcut')
-    write_shortcut(raw, actions, types=[])
+    # Declaring a text output class is what makes `shortcuts run -o` write
+    # anything: without it the CLI reports success and produces an empty file.
+    write_shortcut(raw, actions, types=[], output_classes=['WFStringContentItem'])
     r = subprocess.run(['shortcuts', 'sign', '--mode', 'anyone', '-i', raw, '-o', signed],
                        capture_output=True, text=True)
     if r.returncode != 0:
@@ -86,24 +88,30 @@ def do_import(path, name, timeout=30):
 def run(name, outfile, timeout=120):
     """Run the shortcut and read the file it wrote.
 
-    Not `shortcuts run -o`: that returns success and writes nothing, and adding
-    --output-type makes it hang indefinitely. Having the shortcut save a file is
-    the channel that actually works, and it exercises Save File at the same time.
+    Not `shortcuts run -o`: that reports success and writes an empty file, and
+    --output-type makes it hang forever. The shortcut saving a file is the channel
+    that works, and it exercises Save File at the same time.
+
+    `shortcuts run` also does not reliably return when the shortcut has finished,
+    so poll for the file and stop waiting on the process once it turns up.
     """
     landing = os.path.join(ICLOUD, PROBE_DIR, outfile)
     if os.path.exists(landing):
         os.remove(landing)
-    try:
-        r = subprocess.run(['shortcuts', 'run', name], capture_output=True,
-                           text=True, timeout=timeout)
-        err = (r.stderr or '').strip()
-    except subprocess.TimeoutExpired:
-        err = f'shortcuts run did not return within {timeout}s'
-    deadline = time.time() + 10
-    while time.time() < deadline and not os.path.exists(landing):
+    proc = subprocess.Popen(['shortcuts', 'run', name],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if os.path.exists(landing):
+            time.sleep(0.5)          # let the write settle
+            proc.terminate()
+            return open(landing).read(), ''
+        if proc.poll() is not None:
+            break
         time.sleep(0.3)
-    body = open(landing).read() if os.path.exists(landing) else ''
-    return body, err
+    proc.terminate()
+    err = (proc.stderr.read().decode() if proc.stderr else '').strip()
+    return '', err or 'no output within %ds' % timeout
 
 
 def probe(name, report_template, *tokens, setup=(), reimport=True):
@@ -122,6 +130,9 @@ def probe(name, report_template, *tokens, setup=(), reimport=True):
     acts.append(action('is.workflow.actions.gettext', UUID=said,
                        WFTextActionText=text(report_template, *tokens)))
     acts += save_file(outfile, f'/{PROBE_DIR}/{outfile}', out_text(said))
+    acts.append(action('is.workflow.actions.output',
+                       WFOutput=out_text(said),
+                       WFNoOutputSurfaceBehavior='Do Nothing'))
     path = sign(acts, name)
     if reimport or not installed(name):
         ok, note = do_import(path, name)

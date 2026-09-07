@@ -194,7 +194,8 @@ def save_file(name_value, path_value, item):
 
 
 # ── Output ──────────────────────────────────────────────────
-def write_shortcut(path, actions, *, types=None, input_classes=None):
+def write_shortcut(path, actions, *, types=None, input_classes=None,
+                   output_classes=None):
     wf = {'WFWorkflowActions': actions,
           'WFWorkflowClientVersion': '2038.0.4.4',
           'WFWorkflowHasOutputFallback': False,
@@ -212,7 +213,7 @@ def write_shortcut(path, actions, *, types=None, input_classes=None):
               'WFStringContentItem', 'WFURLContentItem'],
           'WFWorkflowMinimumClientVersion': 900,
           'WFWorkflowMinimumClientVersionString': '900',
-          'WFWorkflowOutputContentItemClasses': [],
+          'WFWorkflowOutputContentItemClasses': output_classes or [],
           'WFWorkflowTypes': types if types is not None else ['NCWidget', 'WatchKit']}
     with open(path, 'wb') as fh:
         plistlib.dump(wf, fh)

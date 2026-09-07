@@ -453,6 +453,38 @@ export async function run() {
     eq('all 17 marked', pc.indicesFor('delete').length, 17);
   });
 
+  await test('a batch with nothing to delete still offers to record itself', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.photos.forEach(p => { p.decision = 'keep'; });
+    pc.showConfirm();
+    const btn = document.getElementById('btn-delete');
+    eq('button is shown, not hidden', btn.style.display, '');
+    eq('and relabelled', btn.textContent, 'Finish \u2014 mark all as triaged');
+    check('and no longer looks destructive', btn.classList.contains('btn-finish'), btn.className);
+    eq('nothing to emit', pc.buildInput(), '');
+  });
+
+  await test('with something to delete it is the delete button again', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    pc.photos[0].decision = 'delete';
+    pc.photos[1].decision = 'keep';
+    pc.showConfirm();
+    const btn = document.getElementById('btn-delete');
+    eq('label', btn.textContent, 'Delete');
+    check('destructive styling back', !btn.classList.contains('btn-finish'), btn.className);
+    eq('emits the index', pc.buildInput(), '1');
+  });
+
+  await test('quick pick has nothing to record, so no finish button', async () => {
+    const entries = [{ file: await photoFile('IMG_1.jpg'), idx: null, name: 'IMG_1.jpg' }];
+    pc.startSession(entries, null, { quick: true });
+    pc.photos[0].decision = 'keep';
+    pc.showConfirm();
+    eq('hidden', document.getElementById('btn-delete').style.display, 'none');
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,
