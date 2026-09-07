@@ -16,6 +16,8 @@ What it checks:
   * If / Repeat groups open, branch and close in order and nest properly
   * Repeat Index / Repeat Item are only referenced inside a repeat
   * text token offsets line up with the U+FFFC placeholders in the string
+  * no Repeat iterates a library-wide scan, which costs time proportional to the
+    photo library rather than to the batch
   * export and delete resolve the same ordered list of assets
 """
 
@@ -34,6 +36,19 @@ CONTROL_FLOW = {
     'is.workflow.actions.repeat.each',
     'is.workflow.actions.choosefrommenu',
 }
+# Actions that return "the latest N" from the whole photo library. Their cost is
+# set by N, not by the batch, so a Repeat over one of them is proportional to the
+# library: a 500-video scan looped one asset at a time hung a two-item export for
+# minutes. Shortcuts actions map over lists, so read properties off the list in
+# one action instead of iterating it.
+LIBRARY_SCANS = {
+    'is.workflow.actions.getlastvideo',
+    'is.workflow.actions.getlastscreenshot',
+    'is.workflow.actions.getlastphoto',
+    'is.workflow.actions.getlatestlivephotos',
+    'is.workflow.actions.getlatestphotoimport',
+}
+
 # Actions that legitimately take no input of their own.
 NO_INPUT_OK = {
     'is.workflow.actions.date', 'is.workflow.actions.gettext',
@@ -58,6 +73,10 @@ def _walk(value):
 def check(actions, name):
     problems = []
     seen_uuids = set()
+    scan_uuids = {a['WFWorkflowActionParameters']['UUID']: a['WFWorkflowActionIdentifier']
+                  for a in actions
+                  if a['WFWorkflowActionIdentifier'] in LIBRARY_SCANS
+                  and a['WFWorkflowActionParameters'].get('UUID')}
     stack = []            # open control-flow groups
     repeat_depth = 0
 
@@ -90,6 +109,14 @@ def check(actions, name):
                     pos = int(key.strip('{}').split(',')[0])
                     if pos >= len(s) or s[pos] != TOKEN:
                         fail(i, f'token offset {pos} does not land on a placeholder in {s!r}')
+
+        # ── repeats must not iterate a library-wide scan ──
+        if ident == 'is.workflow.actions.repeat.each' and params.get('WFControlFlowMode') == 0:
+            src = params.get('WFInput', {})
+            ref = src.get('Value', {}).get('OutputUUID') if isinstance(src, dict) else None
+            if ref in scan_uuids:
+                fail(i, f'repeats over {scan_uuids[ref]}, whose size is the library '
+                        f'rather than the batch — map over the list in one action instead')
 
         # ── control flow ──
         if ident in CONTROL_FLOW:

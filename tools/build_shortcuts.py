@@ -54,10 +54,14 @@ CATEGORIES = [('WhatsApp', 'whatsapp')]
 # An int here appeared to be ignored: a run that should have listed hundreds of
 # screenshots wrote a 422-byte sidecar, about eleven names, so screenshots outside
 # that handful were never tagged and went into the swipe stack untouched.
-SCREENSHOT_SCAN = 500.0
+SCREENSHOT_SCAN = 120.0
 # Get Type's exact wording for a video is not known. Test every plausible spelling
 # rather than spend a round trip per guess; diag-types.txt records the real answer.
-VIDEO_SCAN = 500.0      # how many recent videos to name, for the video/photo split
+# Deliberately small. These scans cost time proportional to the library, not to
+# the batch, and a 500-video scan hung a two-item export for minutes. Only assets
+# inside the export window can matter, so a shallow scan loses nothing: a video
+# older than this is also older than WINDOW_DAYS and is not in the export.
+VIDEO_SCAN = 60.0
 
 BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build')
 
@@ -199,15 +203,9 @@ def build_export():
     vids = uid()
     acts.append(action('is.workflow.actions.getlastvideo', UUID=vids,
                        WFGetLatestPhotoCount=VIDEO_SCAN))
-    vgot = uid()
-    acts += repeat_each(out(vids, 'Latest Videos'), [
-        action('is.workflow.actions.getitemname', UUID=vgot, WFInput=var('Repeat Item')),
-        append_var('VideoNames', out(vgot, 'Name')),
-    ])
-    vjoin = uid()
-    acts.append(action('is.workflow.actions.text.combine', UUID=vjoin,
-                       text=var('VideoNames'), WFTextSeparator='New Lines'))
-    acts.append(set_var('VideoList', out(vjoin, 'Combined Text')))
+    vnames, vacts = _names_of(out(vids, 'Latest Videos'))
+    acts += vacts
+    acts.append(set_var('VideoList', vnames))
     vcount = uid()
     acts.append(action('is.workflow.actions.count', UUID=vcount,
                        Input=out(vids, 'Latest Videos'), WFCountType='Items'))
@@ -245,14 +243,12 @@ def build_export():
     # What Get Type actually says, one line per asset in index order. Purely
     # diagnostic — the app ignores diag-*.txt — but it is the difference between
     # knowing the answer and guessing at it again.
-    typ = uid()
-    acts += repeat_each(var('Assets'), [
-        action('is.workflow.actions.getitemtype', UUID=typ, WFInput=var('Repeat Item')),
-        append_var('Types', out(typ, 'Type')),
-    ])
-    typjoin = uid()
-    acts.append(action('is.workflow.actions.text.combine', UUID=typjoin,
-                       text=var('Types'), WFTextSeparator='New Lines'))
+    typ, typjoin = uid(), uid()
+    acts += [
+        action('is.workflow.actions.getitemtype', UUID=typ, WFInput=var('Assets')),
+        action('is.workflow.actions.text.combine', UUID=typjoin,
+               text=out(typ, 'Type'), WFTextSeparator='New Lines'),
+    ]
     acts += save_file('diag-types.txt',
                       text(EXPORT_ROOT + '/{}/diag-types.txt', var('Stamp')),
                       out(typjoin, 'Combined Text'))
@@ -294,20 +290,28 @@ def build_export():
     return acts
 
 
+def _names_of(items):
+    """One newline-joined block of the names of every item in a list.
+
+    Two actions, not a Repeat. Shortcuts actions map over lists, so Get Name on a
+    list of assets yields a list of names — the previous version looped and
+    appended one at a time, which cost an action per asset in the library and hung
+    a two-item export for minutes.
+    """
+    got, joined = uid(), uid()
+    return out(joined, 'Combined Text'), [
+        action('is.workflow.actions.getitemname', UUID=got, WFInput=items),
+        action('is.workflow.actions.text.combine', UUID=joined,
+               text=out(got, 'Name'), WFTextSeparator='New Lines'),
+    ]
+
+
 def _sidecar(kind, items):
-    vname = f'Names_{kind}'
-    got = uid()
-    acts = repeat_each(items, [
-        action('is.workflow.actions.getitemname', UUID=got, WFInput=var('Repeat Item')),
-        append_var(vname, out(got, 'Name')),
-    ])
-    joined = uid()
-    acts.append(action('is.workflow.actions.text.combine', UUID=joined,
-                       text=var(vname), WFTextSeparator='New Lines'))
+    joined, acts = _names_of(items)
     return acts + save_file(
         f'group-{kind}.txt',
         text(EXPORT_ROOT + '/{}/group-' + kind + '.txt', var('Stamp')),
-        out(joined, 'Combined Text'))
+        joined)
 
 
 def _video_branch(item, name):
