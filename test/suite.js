@@ -485,6 +485,52 @@ export async function run() {
     eq('hidden', document.getElementById('btn-delete').style.display, 'none');
   });
 
+  await test('a companion video is paired with its poster and plays as video', async () => {
+    const files = await goodExport(3);
+    files.push(videoFile('v_IMG_1002.HEIC.mp4'));
+    const res = await pc.validateSelection(files);
+    check('accepted', !res.errors, errorText(res));
+    eq('companion is not an item of its own', res.entries.length, 3);
+    eq('paired to index 2', res.entries.map(e => !!e.videoFile), [false, true, false]);
+
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    eq('types', pc.photos.map(p => p.type), ['image', 'video', 'image']);
+    const v = pc.photos[1];
+    check('media url is the video', v.url !== v.poster, `${v.url} vs ${v.poster}`);
+    eq('file swapped for the video', v.file.name, 'v_IMG_1002.HEIC.mp4');
+    eq('thumbnail is the poster, not a decoded frame', v.thumb, v.poster);
+    eq('index preserved', v.idx, 2);
+  });
+
+  await test('a companion naming nothing is dropped, not an error', async () => {
+    const files = await goodExport(2);
+    files.push(videoFile('v_IMG_9999.HEIC.mp4'));
+    const res = await pc.validateSelection(files);
+    check('accepted', !res.errors, errorText(res));
+    eq('nothing paired', res.entries.filter(e => e.videoFile).length, 0);
+    eq('count still 2', res.entries.length, 2);
+  });
+
+  await test('companions do not disturb the count check', async () => {
+    // The manifest counts assets, not files. Three assets plus two companions is
+    // five files and must still read as a count of three.
+    const files = await goodExport(3);
+    files.push(videoFile('v_IMG_1001.HEIC.mp4'));
+    files.push(videoFile('v_IMG_1003.HEIC.mp4'));
+    const res = await pc.validateSelection(files);
+    check('accepted', !res.errors, errorText(res));
+    eq('two paired', res.entries.filter(e => e.videoFile).length, 2);
+  });
+
+  await test('companion matching ignores the original extension', async () => {
+    const files = await goodExport(2);
+    // Export writes v_<Get Name>.mp4, and Get Name gives a bare name.
+    files.push(videoFile('v_IMG_1001.mp4'));
+    const res = await pc.validateSelection(files);
+    check('accepted', !res.errors, errorText(res));
+    eq('matched despite .HEIC in the item name', res.entries[0].videoFile.name, 'v_IMG_1001.mp4');
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,

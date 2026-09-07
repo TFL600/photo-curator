@@ -205,7 +205,7 @@ def build_export():
                        WFGetLatestPhotoCount=VIDEO_SCAN))
     vnames, vacts = _names_of(out(vids, 'Latest Videos'))
     acts += vacts
-    acts.append(set_var('VideoList', vnames))
+    acts.append(set_var('VideoList', vnames))   # diagnostic only, see diag-videos.txt
     vcount = uid()
     acts.append(action('is.workflow.actions.count', UUID=vcount,
                        Input=out(vids, 'Latest Videos'), WFCountType='Items'))
@@ -225,6 +225,15 @@ def build_export():
 
     # The export itself. Assets and Total were captured above, before the sidecars,
     # and nothing since has touched the album.
+    # Every asset gets a JPEG, videos included — that is the poster frame, and it
+    # keeps indices, thumbnails and the strip working with no branching at all.
+    #
+    # There is no If here on purpose. Three attempts at one failed the same way:
+    # a name test could not work (names are UUIDs with no extension), Get Type
+    # reports "Photo media" for videos as well as photos, and testing membership of
+    # the video-name list never fired either — the legacy WFCondition keys are
+    # stored on import and then ignored at runtime, exactly like Format Date's.
+    # Videos are handled by a second pass below instead, which needs no condition.
     item = uid()
     name = uid()
     body = [
@@ -232,13 +241,42 @@ def build_export():
                WFItemSpecifier='Item At Index', WFItemIndex=var('Repeat Index')),
         action('is.workflow.actions.getitemname', UUID=name, WFInput=out(item, 'Item from List')),
     ]
-    # Not the filename: Get Name returns the asset's UUID, with no extension at
-    # all, so a contains-".MOV" test could never match and every video was being
-    # flattened to a poster-frame JPEG. Branch on membership of the video-name list.
-    body += if_contains(var('VideoList'), out(name, 'Name'),
-                        _video_branch(item, name),
-                        _photo_branch(item, name))
+    body += _photo_branch(item, name)
     acts += repeat_count(var('Total'), body)
+
+    # Second pass: the videos in this batch, written as companion files.
+    #
+    # Filter Photos takes an input list, so the recent videos can be narrowed to
+    # the ones in Triage without needing a media-type filter (there isn't one) and
+    # without a condition. The loop is then only as long as the batch's videos.
+    # Each is saved as v_<name>.mp4 alongside its JPEG; the app pairs them up by
+    # name, plays the video and keeps the JPEG as the instant thumbnail. If this
+    # pass ever yields nothing, the export degrades to poster frames rather than
+    # breaking.
+    vintriage = uid()
+    acts.append(action(
+        'is.workflow.actions.filter.photos', UUID=vintriage,
+        WFContentItemInputParameter=out(vids, 'Latest Videos'),
+        WFContentItemSortProperty='Date Taken', WFContentItemSortOrder='Oldest First',
+        WFContentItemLimitEnabled=False,
+        WFContentItemFilter={
+            'Value': {'WFActionParameterFilterPrefix': 1,
+                      'WFActionParameterFilterTemplates': [album_is(TRIAGE_ALBUM)],
+                      'WFContentPredicateBoundedDate': False},
+            'WFSerializationType': 'WFContentPredicateTableTemplate'}))
+    vname, venc = uid(), uid()
+    acts += repeat_each(out(vintriage, 'Photos'), [
+        action('is.workflow.actions.getitemname', UUID=vname, WFInput=var('Repeat Item')),
+        action('is.workflow.actions.encodemedia', UUID=venc, WFMedia=var('Repeat Item'),
+               WFMediaSize=VIDEO_SIZE, WFMediaAudioOnly=False),
+    ] + save_file(
+        text('v_{}.mp4', out(vname, 'Name')),
+        text(EXPORT_ROOT + '/{}/v_{}.mp4', var('Stamp'), out(vname, 'Name')),
+        out(venc, 'Encoded Media')))
+    vtcount = uid()
+    acts.append(action('is.workflow.actions.count', UUID=vtcount,
+                       Input=out(vintriage, 'Photos'), WFCountType='Items'))
+    acts.append(set_var('VidsHere', out(vtcount, 'Count')))
 
     # What Get Type actually says, one line per asset in index order. Purely
     # diagnostic — the app ignores diag-*.txt — but it is the difference between
@@ -281,9 +319,10 @@ def build_export():
         'is.workflow.actions.notification',
         WFNotificationActionBody=text(
             'Triage export ready (build ' + BUILD_PLACEHOLDER + '): {} items in {}. '
-            'Scanned {} screenshots, {} videos. Started {}, finished {}.',
-            var('Total'), var('Stamp'), var('ShotsSeen'), var('VidsSeen'),
-            var('StartedAt'), out(ended, 'Date')),
+            '{} of them videos. Scanned {} screenshots, {} videos. '
+            'Started {}, finished {}.',
+            var('Total'), var('Stamp'), var('VidsHere'), var('ShotsSeen'),
+            var('VidsSeen'), var('StartedAt'), out(ended, 'Date')),
         WFNotificationActionTitle='Photo Curator',
         WFInputIsShownAsAttachment=False))
 
@@ -312,18 +351,6 @@ def _sidecar(kind, items):
         f'group-{kind}.txt',
         text(EXPORT_ROOT + '/{}/group-' + kind + '.txt', var('Stamp')),
         joined)
-
-
-def _video_branch(item, name):
-    encoded = uid()
-    return [
-        action('is.workflow.actions.encodemedia', UUID=encoded,
-               WFMedia=out(item, 'Item from List'), WFMediaSize=VIDEO_SIZE,
-               WFMediaAudioOnly=False),
-    ] + save_file(
-        text('{}_{}.mp4', var('Repeat Index'), out(name, 'Name')),
-        text(EXPORT_ROOT + '/{}/{}_{}.mp4', var('Stamp'), var('Repeat Index'), out(name, 'Name')),
-        out(encoded, 'Encoded Media'))
 
 
 def _photo_branch(item, name):

@@ -1346,6 +1346,13 @@ const SIDECAR_RE = /^group-([a-z0-9_-]+)\.txt$/i;
 // hand, never interpreted, but they must not be mistaken for a stray file — a stray
 // is a hard rejection, and rightly so.
 const DIAG_RE = /^diag-[a-z0-9_-]+\.txt$/i;
+// A video the export wrote alongside its poster JPEG, paired by asset name.
+// Videos cannot be branched on inside the export loop — every mechanism for it
+// either cannot see the difference or is ignored at runtime — so they are written
+// twice: once as a JPEG that carries the index, and once as v_<name>.mp4. The
+// JPEG then doubles as an instant thumbnail, which is faster than decoding a
+// frame out of the video.
+const COMPANION_RE = /^v_(.+)\.(mp4|m4v|mov)$/i;
 const KIND_ORDER  = ['whatsapp', 'screenshot'];
 const KIND_LABEL  = { whatsapp: 'WhatsApp', screenshot: 'Screenshots' };
 const KIND_BLURB  = {
@@ -1427,11 +1434,13 @@ async function validateSelection(files) {
   const manifestFile = files.find(f => f.name.toLowerCase() === MANIFEST_NAME);
   const sidecars = files.filter(f => f !== manifestFile && SIDECAR_RE.test(f.name));
   const diags    = files.filter(f => f !== manifestFile && DIAG_RE.test(f.name));
-  const ignored  = f => f === manifestFile || sidecars.includes(f) || diags.includes(f);
+  const companions = files.filter(f => f !== manifestFile && COMPANION_RE.test(f.name));
+  const ignored  = f => f === manifestFile || sidecars.includes(f) ||
+                        diags.includes(f) || companions.includes(f);
   const media  = files.filter(f => !ignored(f) && isMediaFile(f));
   const strays = files.filter(f => !ignored(f) && !isMediaFile(f));
 
-  diag.push(`${files.length} file(s) selected · ${media.length} media · ${sidecars.length} group file(s) · ${diags.length} diagnostic file(s) · manifest.json ${manifestFile ? 'present' : 'MISSING'}`);
+  diag.push(`${files.length} file(s) selected · ${media.length} media · ${companions.length} companion video(s) · ${sidecars.length} group file(s) · ${diags.length} diagnostic file(s) · manifest.json ${manifestFile ? 'present' : 'MISSING'}`);
 
   let mf = null;
   if (!manifestFile) {
@@ -1504,6 +1513,18 @@ async function validateSelection(files) {
       errors.push(`Manifest says the last item is ${mf.last}, but it is ${entries[entries.length - 1].name}.`);
     }
   }
+
+  // Pair each companion video with the entry whose asset name it matches. A
+  // companion that matches nothing is noted and dropped, never an error: it means
+  // a video left the album between the two passes, which costs a poster frame.
+  for (const file of companions) {
+    const want = normaliseAssetName(COMPANION_RE.exec(file.name)[1]);
+    const hit = entries.find(e => e.name && normaliseAssetName(e.name) === want);
+    if (hit) hit.videoFile = file;
+    else diag.push(`companion video matches no item, ignored: ${file.name}`);
+  }
+  const paired = entries.filter(e => e.videoFile).length;
+  if (companions.length) diag.push(`${paired} of ${companions.length} companion video(s) paired`);
 
   // Categories. Read after the integrity checks so a broken sidecar can never
   // be the reason a good export is rejected — an unreadable one is just dropped.
@@ -1597,7 +1618,10 @@ function resetSelectButton() {
 }
 
 function releasePhotos() {
-  photos.forEach(p => URL.revokeObjectURL(p.url));
+  photos.forEach(p => {
+    URL.revokeObjectURL(p.url);
+    if (p.poster && p.poster !== p.url) URL.revokeObjectURL(p.poster);
+  });
   photos = [];
 }
 
@@ -1612,17 +1636,24 @@ function startSession(entries, mf, opts) {
   decisionStack = [];
   stripThumbs.length = 0;
 
-  photos = entries.map(e => ({
-    file: e.file,
-    url: URL.createObjectURL(e.file),
-    idx: e.idx,
-    name: e.name,
-    kind: e.kind || null,
-    decision: null,
-    rotation: 0,
-    type: isVideoFile(e.file) ? 'video' : 'image',
-    thumb: null,
-  }));
+  photos = entries.map(e => {
+    const poster = URL.createObjectURL(e.file);
+    const isVid = !!e.videoFile || isVideoFile(e.file);
+    return {
+      file: e.videoFile || e.file,
+      url: e.videoFile ? URL.createObjectURL(e.videoFile) : poster,
+      poster,
+      idx: e.idx,
+      name: e.name,
+      kind: e.kind || null,
+      decision: null,
+      rotation: 0,
+      type: isVid ? 'video' : 'image',
+      // A companion's poster is already a decoded JPEG, so the strip and the
+      // confirm grid never wait on a video frame.
+      thumb: e.videoFile ? poster : null,
+    };
+  });
 
   const kinds = [...new Set(photos.map(p => p.kind).filter(Boolean))]
     .sort((a, b) => {

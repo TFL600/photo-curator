@@ -77,6 +77,8 @@ def action(identifier, **params):
 # Which parameter carries each action's input, and where that is known from.
 # verify_shortcuts.py checks every action it builds against this table.
 KEY_PROVENANCE = {
+    # Find Photos with no input; Filter Photos when given WFContentItemInputParameter,
+    # named by the loctable summary "Filter ${WFContentItemInputParameter} where".
     'is.workflow.actions.filter.photos':      (None, 'live: Export Triage v7'),
     'is.workflow.actions.setvariable':        ('WFInput', 'live: Export Triage v7'),
     'is.workflow.actions.appendvariable':     ('WFInput', 'live: Delete Photos By Index'),
