@@ -105,6 +105,7 @@ KEY_PROVENANCE = {
     'is.workflow.actions.number':             (None, 'loctable: ${WFNumberActionNumber}'),
     'is.workflow.actions.getlastscreenshot':  (None, 'loctable: Get the latest ${WFGetLatestPhotoCount}'),
     'is.workflow.actions.getitemtype':        ('WFInput', 'loctable: Get type of ${WFInput}'),
+    'is.workflow.actions.getlastvideo':       (None, 'sibling of getlastscreenshot, which works'),
 }
 
 

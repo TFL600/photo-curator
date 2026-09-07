@@ -57,10 +57,7 @@ CATEGORIES = [('WhatsApp', 'whatsapp')]
 SCREENSHOT_SCAN = 500.0
 # Get Type's exact wording for a video is not known. Test every plausible spelling
 # rather than spend a round trip per guess; diag-types.txt records the real answer.
-# Lowercase variants too: Contains may well be case sensitive, and a type of
-# "MPEG-4 movie" would then slip past a test for "Movie".
-VIDEO_TYPE_WORDS = ['Movie', 'movie', 'Video', 'video', 'MP4', 'QuickTime',
-                    'MPEG', 'mpeg', 'AVAsset']
+VIDEO_SCAN = 500.0      # how many recent videos to name, for the video/photo split
 
 BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build')
 
@@ -191,6 +188,34 @@ def build_export():
         acts.append(find_photos(found, [album_is(TRIAGE_ALBUM), album_is(album_name)]))
         acts += _sidecar(kind, out(found, 'Photos'))
 
+    # How a video is told apart from a photo. Get Type reports the same string for
+    # both — confirmed off diag-types.txt from a real run containing one of each —
+    # so type inspection cannot do it. Instead: ask Photos for the recent videos,
+    # keep their names in one block of text, and test membership by name inside the
+    # loop. Names are UUIDs, so there is nothing for a name to collide with, and
+    # every piece of this is a serialization already proven on the phone: Get Latest
+    # Videos mirrors Get Latest Screenshots, and Contains with a variable on the
+    # right-hand side is what Delete Photos By Index already does.
+    vids = uid()
+    acts.append(action('is.workflow.actions.getlastvideo', UUID=vids,
+                       WFGetLatestPhotoCount=VIDEO_SCAN))
+    vgot = uid()
+    acts += repeat_each(out(vids, 'Latest Videos'), [
+        action('is.workflow.actions.getitemname', UUID=vgot, WFInput=var('Repeat Item')),
+        append_var('VideoNames', out(vgot, 'Name')),
+    ])
+    vjoin = uid()
+    acts.append(action('is.workflow.actions.text.combine', UUID=vjoin,
+                       text=var('VideoNames'), WFTextSeparator='New Lines'))
+    acts.append(set_var('VideoList', out(vjoin, 'Combined Text')))
+    vcount = uid()
+    acts.append(action('is.workflow.actions.count', UUID=vcount,
+                       Input=out(vids, 'Latest Videos'), WFCountType='Items'))
+    acts.append(set_var('VidsSeen', out(vcount, 'Count')))
+    acts += save_file('diag-videos.txt',
+                      text(EXPORT_ROOT + '/{}/diag-videos.txt', var('Stamp')),
+                      var('VideoList'))
+
     shots = uid()
     acts.append(action('is.workflow.actions.getlastscreenshot', UUID=shots,
                        WFGetLatestPhotoCount=SCREENSHOT_SCAN))
@@ -204,17 +229,17 @@ def build_export():
     # and nothing since has touched the album.
     item = uid()
     name = uid()
-    kind = uid()
     body = [
         action('is.workflow.actions.getitemfromlist', UUID=item, WFInput=var('Assets'),
                WFItemSpecifier='Item At Index', WFItemIndex=var('Repeat Index')),
         action('is.workflow.actions.getitemname', UUID=name, WFInput=out(item, 'Item from List')),
-        action('is.workflow.actions.getitemtype', UUID=kind, WFInput=out(item, 'Item from List')),
     ]
     # Not the filename: Get Name returns the asset's UUID, with no extension at
     # all, so a contains-".MOV" test could never match and every video was being
-    # flattened to a poster-frame JPEG. Branch on the item's type instead.
-    body += _video_or_photo(out(kind, 'Type'), VIDEO_TYPE_WORDS, item, name)
+    # flattened to a poster-frame JPEG. Branch on membership of the video-name list.
+    body += if_contains(var('VideoList'), out(name, 'Name'),
+                        _video_branch(item, name),
+                        _photo_branch(item, name))
     acts += repeat_count(var('Total'), body)
 
     # What Get Type actually says, one line per asset in index order. Purely
@@ -260,27 +285,13 @@ def build_export():
         'is.workflow.actions.notification',
         WFNotificationActionBody=text(
             'Triage export ready (build ' + BUILD_PLACEHOLDER + '): {} items in {}. '
-            'Screenshots scanned: {}. Started {}, finished {}.',
-            var('Total'), var('Stamp'), var('ShotsSeen'), var('StartedAt'),
-            out(ended, 'Date')),
+            'Scanned {} screenshots, {} videos. Started {}, finished {}.',
+            var('Total'), var('Stamp'), var('ShotsSeen'), var('VidsSeen'),
+            var('StartedAt'), out(ended, 'Date')),
         WFNotificationActionTitle='Photo Curator',
         WFInputIsShownAsAttachment=False))
 
     return acts
-
-
-def _video_or_photo(type_token, words, item, name):
-    """Nested ifs: any of `words` in the type means video, otherwise photo.
-
-    Generated, so an extra candidate spelling costs nothing. Getting this wrong
-    costs a whole round trip through the phone, and being wrong looks exactly like
-    working — the video quietly becomes a poster-frame JPEG.
-    """
-    if not words:
-        return _photo_branch(item, name)
-    return if_contains(type_token, words[0],
-                       _video_branch(item, name),
-                       _video_or_photo(type_token, words[1:], item, name))
 
 
 def _sidecar(kind, items):
