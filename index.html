@@ -1339,6 +1339,10 @@ const VIDEO_EXT_RE = /\.(mov|mp4|m4v)$/i;
 // line, naming the members of a category. They only steer the staging UI, never
 // identity, so a name collision costs a mis-staged thumbnail and nothing more.
 const SIDECAR_RE = /^group-([a-z0-9_-]+)\.txt$/i;
+// Diagnostics the export drops alongside the media. Carried so they can be read by
+// hand, never interpreted, but they must not be mistaken for a stray file — a stray
+// is a hard rejection, and rightly so.
+const DIAG_RE = /^diag-[a-z0-9_-]+\.txt$/i;
 const KIND_ORDER  = ['whatsapp', 'screenshot'];
 const KIND_LABEL  = { whatsapp: 'WhatsApp', screenshot: 'Screenshots' };
 const KIND_BLURB  = {
@@ -1419,10 +1423,12 @@ async function validateSelection(files) {
   const diag = [];
   const manifestFile = files.find(f => f.name.toLowerCase() === MANIFEST_NAME);
   const sidecars = files.filter(f => f !== manifestFile && SIDECAR_RE.test(f.name));
-  const media  = files.filter(f => f !== manifestFile && !sidecars.includes(f) && isMediaFile(f));
-  const strays = files.filter(f => f !== manifestFile && !sidecars.includes(f) && !isMediaFile(f));
+  const diags    = files.filter(f => f !== manifestFile && DIAG_RE.test(f.name));
+  const ignored  = f => f === manifestFile || sidecars.includes(f) || diags.includes(f);
+  const media  = files.filter(f => !ignored(f) && isMediaFile(f));
+  const strays = files.filter(f => !ignored(f) && !isMediaFile(f));
 
-  diag.push(`${files.length} file(s) selected · ${media.length} media · ${sidecars.length} group file(s) · manifest.json ${manifestFile ? 'present' : 'MISSING'}`);
+  diag.push(`${files.length} file(s) selected · ${media.length} media · ${sidecars.length} group file(s) · ${diags.length} diagnostic file(s) · manifest.json ${manifestFile ? 'present' : 'MISSING'}`);
 
   let mf = null;
   if (!manifestFile) {
@@ -1709,8 +1715,11 @@ function renderStage(kind, items) {
   stageItems = items;
   stagePicked = new Set();
   stageTitle.textContent = KIND_LABEL[kind] || kind;
+  // Says how much of the export this category covers. A category that should be
+  // most of the batch but reads as a handful means a short sidecar, which is
+  // otherwise invisible: the untagged ones just quietly turn up in the swipe stack.
   stageSub.textContent =
-    `${items.length} item${items.length === 1 ? '' : 's'}. ` +
+    `${items.length} of ${photos.length} item${photos.length === 1 ? '' : 's'}. ` +
     (KIND_BLURB[kind] || 'Tap the ones worth a closer look.') +
     ' Tap the ones you want to swipe; the rest go straight to the delete pile.';
 

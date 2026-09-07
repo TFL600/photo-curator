@@ -50,7 +50,14 @@ VIDEO_SIZE = '960x540'
 # cannot see — asking for it aborts the whole run with "Photo album not found" —
 # so screenshots come from the dedicated action below instead.
 CATEGORIES = [('WhatsApp', 'whatsapp')]
-SCREENSHOT_SCAN = 300   # how many recent screenshots to name in the sidecar
+# Passed as a float, the way WFContentItemLimitNumber is in the working shortcuts.
+# An int here appeared to be ignored: a run that should have listed hundreds of
+# screenshots wrote a 422-byte sidecar, about eleven names, so screenshots outside
+# that handful were never tagged and went into the swipe stack untouched.
+SCREENSHOT_SCAN = 500.0
+# Get Type's exact wording for a video is not known. Test every plausible spelling
+# rather than spend a round trip per guess; diag-types.txt records the real answer.
+VIDEO_TYPE_WORDS = ['Movie', 'Video', 'MP4', 'QuickTime', 'MPEG', 'AVAsset']
 
 BUILD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build')
 
@@ -185,6 +192,10 @@ def build_export():
     acts.append(action('is.workflow.actions.getlastscreenshot', UUID=shots,
                        WFGetLatestPhotoCount=SCREENSHOT_SCAN))
     acts += _sidecar('screenshot', out(shots, 'Latest Screenshots'))
+    shotcount = uid()
+    acts.append(action('is.workflow.actions.count', UUID=shotcount,
+                       Input=out(shots, 'Latest Screenshots'), WFCountType='Items'))
+    acts.append(set_var('ShotsSeen', out(shotcount, 'Count')))
 
     # The export itself. Assets and Total were captured above, before the sidecars,
     # and nothing since has touched the album.
@@ -199,15 +210,24 @@ def build_export():
     ]
     # Not the filename: Get Name returns the asset's UUID, with no extension at
     # all, so a contains-".MOV" test could never match and every video was being
-    # flattened to a poster-frame JPEG. Branch on the item's type instead, and
-    # cover both words a video type might use.
-    body += if_contains(
-        out(kind, 'Type'), 'Movie',
-        _video_branch(item, name),
-        if_contains(out(kind, 'Type'), 'Video',
-                    _video_branch(item, name),
-                    _photo_branch(item, name)))
+    # flattened to a poster-frame JPEG. Branch on the item's type instead.
+    body += _video_or_photo(out(kind, 'Type'), VIDEO_TYPE_WORDS, item, name)
     acts += repeat_count(var('Total'), body)
+
+    # What Get Type actually says, one line per asset in index order. Purely
+    # diagnostic — the app ignores diag-*.txt — but it is the difference between
+    # knowing the answer and guessing at it again.
+    typ = uid()
+    acts += repeat_each(var('Assets'), [
+        action('is.workflow.actions.getitemtype', UUID=typ, WFInput=var('Repeat Item')),
+        append_var('Types', out(typ, 'Type')),
+    ])
+    typjoin = uid()
+    acts.append(action('is.workflow.actions.text.combine', UUID=typjoin,
+                       text=var('Types'), WFTextSeparator='New Lines'))
+    acts += save_file('diag-types.txt',
+                      text(EXPORT_ROOT + '/{}/diag-types.txt', var('Stamp')),
+                      out(typjoin, 'Combined Text'))
 
     # manifest.json
     last_i, last_n = uid(), uid()
@@ -237,12 +257,27 @@ def build_export():
         'is.workflow.actions.notification',
         WFNotificationActionBody=text(
             'Triage export ready (build ' + BUILD_PLACEHOLDER + '): {} items in {}. '
-            'Started {}, finished {}.',
-            var('Total'), var('Stamp'), var('StartedAt'), out(ended, 'Date')),
+            'Screenshots scanned: {}. Started {}, finished {}.',
+            var('Total'), var('Stamp'), var('ShotsSeen'), var('StartedAt'),
+            out(ended, 'Date')),
         WFNotificationActionTitle='Photo Curator',
         WFInputIsShownAsAttachment=False))
 
     return acts
+
+
+def _video_or_photo(type_token, words, item, name):
+    """Nested ifs: any of `words` in the type means video, otherwise photo.
+
+    Generated, so an extra candidate spelling costs nothing. Getting this wrong
+    costs a whole round trip through the phone, and being wrong looks exactly like
+    working — the video quietly becomes a poster-frame JPEG.
+    """
+    if not words:
+        return _photo_branch(item, name)
+    return if_contains(type_token, words[0],
+                       _video_branch(item, name),
+                       _video_or_photo(type_token, words[1:], item, name))
 
 
 def _sidecar(kind, items):

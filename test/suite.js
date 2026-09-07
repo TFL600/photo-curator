@@ -372,6 +372,24 @@ export async function run() {
     check('no duration claimed', !/exported in/.test(meta), meta);
   });
 
+  await test('diagnostic sidecars are carried, not treated as strays', async () => {
+    const files = await goodExport(2);
+    files.push(textFile('diag-types.txt', 'Image\nQuickTime Movie\n'));
+    const res = await pc.validateSelection(files);
+    check('no errors', !res.errors, errorText(res));
+    eq('not counted as media', res.entries.length, 2);
+    eq('nothing tagged from it', res.entries.filter(e => e.kind).length, 0);
+  });
+
+  await test('the staging grid says how much of the export it covers', async () => {
+    const files = await goodExport(10);
+    files.push(textFile('group-screenshot.txt', 'IMG_1003.HEIC\nIMG_1004.HEIC'));
+    const res = await pc.validateSelection(files);
+    pc.startSession(res.entries, res.manifest, { quick: false });
+    const sub = document.getElementById('stage-sub').textContent;
+    check('reports 2 of 10', /^2 of 10 items/.test(sub), sub);
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,
