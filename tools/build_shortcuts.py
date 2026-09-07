@@ -162,6 +162,34 @@ def build_export():
                             order='Oldest First', limit=WINDOW_LIMIT))
     acts += add_each_to_album(out(recent, 'Photos'), TRIAGE_ALBUM)
     acts += subtract_album(TRIAGE_ALBUM, TRIAGED_ALBUM)
+    acts += _export_body()
+    return acts
+
+
+def build_export_selected():
+    """The same export, over photos handed in from the Photos share sheet.
+
+    This replaces matching hand-picked photos by filename, which cannot be made
+    safe. `Find Photos where Name is X` matches without the extension and collides
+    on Live Photo pairs and edited copies — 229 names once resolved to 257 assets —
+    and the value shape for a name filter could not be verified from here at all:
+    on the phone it did not bind, so 40 names matched the per-name cap times 40,
+    which is arbitrary photos.
+
+    Selecting in Photos and sharing to this instead puts the chosen assets straight
+    into the album, which means the whole proven pipeline applies unchanged:
+    position in the album is identity, the app reads indices, and Delete Photos By
+    Index needs no modification. It is also fewer taps than picking in the app.
+    """
+    acts = list(clear_album(TRIAGE_ALBUM))
+    acts += add_each_to_album(shortcut_input(), TRIAGE_ALBUM)
+    acts += _export_body()
+    return acts, ['ActionExtension']
+
+
+def _export_body():
+    """Everything after the Triage album has been filled: files and manifest."""
+    acts = []
 
     # The export folder has to be new every run: a folder cannot be cleared from a
     # Shortcut (Get Contents of Folder needs a security-scoped bookmark that only a
@@ -551,9 +579,12 @@ SHORTCUTS = {
     'Photo Curator Export': lambda: (build_export(), None),
     'Delete Photos By Index': build_delete,
     'Add Photos To Album By Index': build_add_to_album,
-    'Quick Delete By Name': build_quick_delete,
     'Mark Batch Triaged': build_mark_triaged,
+    'Curate Selected': build_export_selected,
 }
+# Quick Delete By Name is deliberately not built any more. Filename matching cannot
+# be made safe, and Curate Selected covers the same need through the album.
+
 
 
 def main():

@@ -1195,9 +1195,11 @@
   </div>
 
   <div class="quick-note" id="quick-note" style="display:none">
-    <b>Quick pick — no export indices.</b> These photos were chosen by hand, so the app
-    cannot identify them by position. The Shortcut has to match them by filename, which is
-    not unique, so it shows you everything it matched before anything is deleted.
+    <b>Quick pick can't delete.</b> Photos chosen by hand have no export position, so the
+    only way to name them to a Shortcut is by filename — and filenames match the wrong
+    assets. Sort them here to decide, then in <b>Photos</b> select them, tap
+    <b>Share</b> and choose <b>Curate Selected</b>. That routes them through the album,
+    where positions work and deleting is safe.
   </div>
 
   <div class="export-banner" id="export-banner">
@@ -2346,7 +2348,8 @@ function showConfirm() {
               : describeIndices(indicesFor('delete'));
   document.getElementById('album-index-summary').textContent =
     quickMode ? '' : describeIndices(indicesFor('album'));
-  btnDelete.textContent = quickMode ? 'Preview & Delete via Shortcuts' : 'Delete';
+  // Nothing in quick pick can be deleted, so there is no button that would do it.
+  btnDelete.textContent = 'Delete';
   btnDelete.classList.remove('btn-finish');
   document.getElementById('btn-copy').textContent = quickMode ? 'Copy filenames' : 'Copy delete indices';
   // Adding to an album by position is meaningless without an export.
@@ -2396,8 +2399,9 @@ function showConfirm() {
     btnDelete.style.display = quickMode ? 'none' : '';
     btnDelete.textContent = 'Finish — mark all as triaged';
     btnDelete.classList.add('btn-finish');
+    if (quickMode) btnDelete.classList.remove('btn-finish');
   } else {
-    btnDelete.style.display = '';
+    btnDelete.style.display = quickMode ? 'none' : '';
     btnDelete.classList.remove('btn-finish');
     toDelete.forEach(p => thumbGrid.appendChild(buildThumbItem(p, '✕', null)));
   }
@@ -2464,15 +2468,18 @@ btnCopyAlbum.addEventListener('click', () => {
 });
 
 btnDelete.addEventListener('click', () => {
+  // Quick pick has no positions, so it has no delete path at all. Nothing here
+  // may fall back to matching by filename: that is what tried to queue 120
+  // arbitrary photos for deletion.
+  if (quickMode) return;
   const input = buildInput();
   if (!input) {
     // Nothing to delete, but the batch still has to be recorded as triaged.
-    if (quickMode) return;
     window.location.href = 'shortcuts://run-shortcut?name=Mark%20Batch%20Triaged';
     return;
   }
-  const name = quickMode ? 'Quick%20Delete%20By%20Name' : 'Delete%20Photos%20By%20Index';
-  window.location.href = `shortcuts://run-shortcut?name=${name}&input=` + encodeURIComponent(input);
+  window.location.href = 'shortcuts://run-shortcut?name=Delete%20Photos%20By%20Index&input='
+    + encodeURIComponent(input);
 });
 
 const btnCopy = document.getElementById('btn-copy');

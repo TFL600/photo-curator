@@ -276,7 +276,7 @@ export async function run() {
     eq('album', pc.buildAlbumInput(), '2');
   });
 
-  await test('quick pick skips the guard and emits names, not indices', async () => {
+  await test('quick pick can sort but offers no way to delete', async () => {
     const entries = [
       { file: await photoFile('IMG_0007.jpg', 10), idx: null, name: 'IMG_0007.jpg' },
       { file: await photoFile('IMG_0008.jpg', 90), idx: null, name: 'IMG_0008.jpg' },
@@ -286,12 +286,26 @@ export async function run() {
     eq('no manifest', pc.manifest, null);
     eq('straight to swiping', pc.activeScreen(), 'swiper');
     pc.photos[1].decision = 'delete';
-    eq('names not indices', pc.buildInput(), 'IMG_0008.jpg');
     pc.showConfirm();
     eq('quick warning shown', document.getElementById('quick-note').style.display, '');
     eq('export banner hidden', document.getElementById('export-banner').style.display, 'none');
     eq('album shortcut hidden', document.getElementById('btn-album-shortcut').style.display, 'none');
-    eq('delete button relabelled', document.getElementById('btn-delete').textContent, 'Preview & Delete via Shortcuts');
+    // A filename list must never reach a Shortcut: matching by name resolved 40
+    // names to 120 arbitrary assets on a real library.
+    eq('no delete button at all', document.getElementById('btn-delete').style.display, 'none');
+    check('and it points at the safe route',
+      /Curate Selected/.test(document.getElementById('quick-note').textContent),
+      document.getElementById('quick-note').textContent);
+  });
+
+  await test('quick pick with an empty delete pile still offers nothing', async () => {
+    const entries = [{ file: await photoFile('IMG_1.jpg'), idx: null, name: 'IMG_1.jpg' }];
+    pc.startSession(entries, null, { quick: true });
+    pc.photos[0].decision = 'keep';
+    pc.showConfirm();
+    const btn = document.getElementById('btn-delete');
+    eq('hidden', btn.style.display, 'none');
+    check('not styled as the finish button', !btn.classList.contains('btn-finish'), btn.className);
   });
 
   await test('an export session restores the index-based confirm screen', async () => {
@@ -475,14 +489,6 @@ export async function run() {
     eq('label', btn.textContent, 'Delete');
     check('destructive styling back', !btn.classList.contains('btn-finish'), btn.className);
     eq('emits the index', pc.buildInput(), '1');
-  });
-
-  await test('quick pick has nothing to record, so no finish button', async () => {
-    const entries = [{ file: await photoFile('IMG_1.jpg'), idx: null, name: 'IMG_1.jpg' }];
-    pc.startSession(entries, null, { quick: true });
-    pc.photos[0].decision = 'keep';
-    pc.showConfirm();
-    eq('hidden', document.getElementById('btn-delete').style.display, 'none');
   });
 
   await test('a companion video is paired with its poster and plays as video', async () => {
