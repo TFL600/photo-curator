@@ -109,21 +109,30 @@ def run(name, outfile, timeout=120):
         if proc.poll() is not None:
             break
         time.sleep(0.3)
-    proc.terminate()
-    err = (proc.stderr.read().decode() if proc.stderr else '').strip()
+    # kill, not terminate, and never a bare read(): `shortcuts run` can outlive a
+    # SIGTERM, and reading its stderr then blocks past the deadline the caller was
+    # promised — which turns a timeout into a hang.
+    proc.kill()
+    try:
+        _, errb = proc.communicate(timeout=5)
+        err = (errb or b'').decode().strip()
+    except subprocess.TimeoutExpired:
+        err = ''
     return '', err or 'no output within %ds' % timeout
 
 
-def probe(name, report_template, *tokens, setup=(), reimport=True):
+def probe(name, report_template, *tokens, setup=(), reimport=True, unique=False):
     """Build, import and run a shortcut that writes `report_template` to a file.
 
-    The name gets a unique suffix. Importing over an existing name raises a
-    replace/keep-both dialog and leaves the library in a state where `shortcuts
-    run` can briefly not resolve the name at all; a fresh name every time avoids
-    the whole question. Probes are disposable, so the litter is acceptable —
-    `--clean` removes them.
+    Stable names by default. A unique name per run dodges the replace dialog, but
+    it costs a *new* Shortcuts permission grant every time — any shortcut that
+    reads photos and writes a file raises "allow N photos to be saved to a file",
+    which blocks an unattended run — and it leaves a shortcut behind that no CLI
+    can delete. A stable name is granted once and reused. Pass unique=True only
+    when a run must not disturb an existing grant.
     """
-    name = f'{name} {int(time.time()) % 100000}'
+    if unique:
+        name = f'{name} {int(time.time()) % 100000}'
     outfile = name.replace(' ', '_') + '.txt'
     acts = list(setup)
     said = uid()
@@ -150,11 +159,27 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--selftest', action='store_true',
                     help='prove the build/import/run loop works end to end')
+    ap.add_argument('--clean', action='store_true',
+                    help='list probe shortcuts left in the library')
     args = ap.parse_args()
 
+    if args.clean:
+        # The shortcuts CLI has run/list/view/sign and no delete, and writing to
+        # Shortcuts.sqlite by hand would desync iCloud. So: name them, and let the
+        # Shortcuts app remove them.
+        r = subprocess.run(['shortcuts', 'list'], capture_output=True, text=True)
+        litter = [n for n in r.stdout.splitlines()
+                  if n.startswith(('PC Loop Selftest', 'PC Photo Probe', 'Photo Curator Probe'))]
+        if not litter:
+            print('no probe shortcuts left')
+        else:
+            print(f'{len(litter)} probe shortcut(s) to delete in the Shortcuts app:')
+            for n in litter:
+                print('  ' + n)
+        sys.exit(0)
+
     if args.selftest:
-        name = 'PC Loop Selftest 2'
-        body, err = probe(name, 'loop works')
+        body, err = probe('PC Loop Selftest', 'loop works')
         print(f'output={body!r} err={err!r}')
         sys.exit(0 if (body or '').strip() == 'loop works' else 1)
     ap.print_help()
