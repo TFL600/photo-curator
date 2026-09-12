@@ -46,6 +46,68 @@ async function photoFile(name, hue = 200) {
   return new File([await jpegBlob(hue)], name, { type: 'image/jpeg' });
 }
 
+// Flat colours are deliberate above: a dHash of a solid block has no bits set,
+// which the app treats as "no structure to compare" and leaves as a singleton.
+// Burst tests need real structure, so these draw a deterministic block pattern —
+// same seed means near-identical frames, and `detail` adds fine lines that lift
+// the Laplacian variance without moving the hash much, which is what "sharper
+// frame, same shot" looks like to the ranker.
+function patternBlob(seed, detail) {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  let st = seed;
+  const rnd = () => (st = (st * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const v = Math.round(rnd() * 255);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(x * 8, y * 8, 8, 8);
+    }
+  }
+  if (detail) {
+    // Faint, not bold. At this alpha the Laplacian variance rises about a third
+    // while the 9x8 hash moves by two bits, which is the relationship a sharper
+    // frame of the same shot actually has. Turn it up and the "sharp" frame stops
+    // being a near-duplicate at all, which is a different test.
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    for (let x = 0; x < 64; x += 2) ctx.fillRect(x, 0, 1, 64);
+  }
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
+}
+
+async function patternFile(name, seed, detail) {
+  return new File([await patternBlob(seed, detail)], name, { type: 'image/jpeg' });
+}
+
+// specs: one entry per photo, either a seed number or [seed, detail].
+async function burstExport(specs, extra = {}) {
+  const files = [];
+  for (let i = 0; i < specs.length; i++) {
+    const spec = Array.isArray(specs[i]) ? specs[i] : [specs[i], false];
+    files.push(await patternFile(`${i + 1}_IMG_${1000 + i + 1}.HEIC.jpg`, spec[0], spec[1]));
+  }
+  files.push(manifestFile({
+    album: 'Triage',
+    count: specs.length,
+    first: 'IMG_1001.HEIC',
+    last: `IMG_${1000 + specs.length}.HEIC`,
+    exportedAt: '2026-09-06T09:00:00Z',
+    ...extra,
+  }));
+  return files;
+}
+
+function burstCards() {
+  return [...document.querySelectorAll('#burst-scroll .burst-card')];
+}
+
+// A tap is one click; the app waits out the double-tap window before acting on it.
+async function tapCard(n) {
+  burstCards()[n].click();
+  await new Promise(r => setTimeout(r, 280));
+}
+
 function videoFile(name) {
   // Not a decodable stream. Nothing under test decodes it: type detection is by
   // MIME type, and thumbnailing resolves to '' on a decode error by design.
@@ -84,6 +146,11 @@ export async function run() {
   const pc = window.__pc;
   if (!pc) throw new Error('window.__pc missing — load the page with ?test=1');
   results.length = 0;
+
+  // Every test here uses the same manifest fields, so they would all share one
+  // persistence key and inherit each other's decisions. Off by default; the one
+  // test that is about persistence turns it on around its own export.
+  pc.setPersistence(false);
 
   await test('parseIndexedName', () => {
     eq('bare number', pc.parseIndexedName('7.jpg'), { idx: 7, name: '' });
@@ -198,7 +265,7 @@ export async function run() {
     ];
     const res = await pc.validateSelection(files);
     check('no errors', !res.errors, errorText(res));
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     eq('second item is a video', pc.photos.map(p => p.type), ['image', 'video']);
     eq('no staging, straight to swiper', pc.activeScreen(), 'swiper');
   });
@@ -207,7 +274,7 @@ export async function run() {
     const files = await goodExport(5);
     files.push(textFile('group-whatsapp.txt', 'IMG_1002.HEIC\nIMG_1003.HEIC\nIMG_1005.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     eq('staging screen', pc.activeScreen(), 'stage');
     eq('3 items staged', pc.stageItems.length, 3);
     eq('grid cells rendered', document.querySelectorAll('#stage-grid .stage-cell').length, 3);
@@ -218,7 +285,7 @@ export async function run() {
     const files = await goodExport(5);
     files.push(textFile('group-whatsapp.txt', 'IMG_1002.HEIC\nIMG_1003.HEIC\nIMG_1005.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     // Tap the middle one.
     document.querySelectorAll('#stage-grid .stage-cell')[1].click();
     eq('one picked', pc.stagePicked.size, 1);
@@ -233,7 +300,7 @@ export async function run() {
     const files = await goodExport(4);
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     document.getElementById('btn-stage-all').click();
     eq('now swiping', pc.activeScreen(), 'swiper');
     eq('nothing decided', pc.photos.filter(p => p.decision).length, 0);
@@ -244,7 +311,7 @@ export async function run() {
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC'));
     files.push(textFile('group-screenshot.txt', 'IMG_1004.HEIC\nIMG_1005.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     eq('whatsapp first', document.getElementById('stage-title').textContent, 'WhatsApp');
     pc.commitStage();
     eq('screenshots second', document.getElementById('stage-title').textContent, 'Screenshots');
@@ -259,7 +326,7 @@ export async function run() {
     const files = await goodExport(2);
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.commitStage();
     eq('confirm screen', pc.activeScreen(), 'confirm');
     eq('delete string', pc.buildInput(), '1,2');
@@ -267,7 +334,7 @@ export async function run() {
 
   await test('index strings are sorted, deduped and comma separated', async () => {
     const res = await pc.validateSelection(await goodExport(5));
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.photos[4].decision = 'delete';
     pc.photos[0].decision = 'delete';
     pc.photos[2].decision = 'delete';
@@ -278,7 +345,7 @@ export async function run() {
 
   await test('an export session restores the index-based confirm screen', async () => {
     const res = await pc.validateSelection(await goodExport(3));
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.photos[0].decision = 'delete';
     pc.showConfirm();
     eq('export banner shown', document.getElementById('export-banner').style.display, '');
@@ -300,7 +367,7 @@ export async function run() {
   await test('the confirm banner reports how long the export took', async () => {
     const files = await goodExport(2, { startedAt: '2026-09-06 09:00:00', exportedAt: '2026-09-06 09:01:12' });
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.showConfirm();
     const meta = document.getElementById('export-meta').textContent;
     check('shows the duration', /exported in 1m 12s/.test(meta), meta);
@@ -314,7 +381,7 @@ export async function run() {
     ];
     const res = await pc.validateSelection(files);
     check('no errors', !res.errors, errorText(res));
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.showConfirm();
     const meta = document.getElementById('export-meta').textContent;
     check('no duration claimed', !/exported in/.test(meta), meta);
@@ -336,7 +403,7 @@ export async function run() {
     check('no errors', !res.errors, errorText(res));
     eq('names parsed whole', res.entries.map(e => e.name), ids);
     eq('sidecar matched a UUID', res.entries.map(e => e.kind || null), [null, 'whatsapp', null]);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     eq('staged', pc.activeScreen(), 'stage');
   });
 
@@ -345,7 +412,7 @@ export async function run() {
       startedAt: '6 September 2026 at 22:16', exportedAt: '6 September 2026 at 22:18',
     });
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.showConfirm();
     eq('shown verbatim', document.getElementById('export-when').textContent,
        '6 September 2026 at 22:18');
@@ -366,7 +433,7 @@ export async function run() {
     const files = await goodExport(10);
     files.push(textFile('group-screenshot.txt', 'IMG_1003.HEIC\nIMG_1004.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     const sub = document.getElementById('stage-sub').textContent;
     check('reports 2 of 10', /^2 of 10 items/.test(sub), sub);
   });
@@ -375,7 +442,7 @@ export async function run() {
     const files = await goodExport(8);
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC\nIMG_1003.HEIC\nIMG_1004.HEIC'));
     const res = await pc.validateSelection(files);
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     const go = document.getElementById('btn-stage-go');
     const all = document.getElementById('btn-stage-all');
     eq('nothing tapped is stated as a deletion', go.textContent, 'Delete all 4');
@@ -423,7 +490,7 @@ export async function run() {
     eq('6 screenshots', res.entries.filter(e => e.kind === 'screenshot').length, 6);
     eq('nothing untagged', res.entries.filter(e => !e.kind).length, 0);
 
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     eq('whatsapp staged first', document.getElementById('stage-title').textContent, 'WhatsApp');
     eq('covers 11 of 17', document.getElementById('stage-sub').textContent.startsWith('11 of 17 items'), true);
     pc.commitStage();
@@ -436,7 +503,7 @@ export async function run() {
 
   await test('a batch with nothing to delete still offers to record itself', async () => {
     const res = await pc.validateSelection(await goodExport(3));
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.photos.forEach(p => { p.decision = 'keep'; });
     pc.showConfirm();
     const btn = document.getElementById('btn-delete');
@@ -448,7 +515,7 @@ export async function run() {
 
   await test('with something to delete it is the delete button again', async () => {
     const res = await pc.validateSelection(await goodExport(3));
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     pc.photos[0].decision = 'delete';
     pc.photos[1].decision = 'keep';
     pc.showConfirm();
@@ -466,7 +533,7 @@ export async function run() {
     eq('companion is not an item of its own', res.entries.length, 3);
     eq('paired to index 2', res.entries.map(e => !!e.videoFile), [false, true, false]);
 
-    pc.startSession(res.entries, res.manifest);
+    await pc.startSession(res.entries, res.manifest);
     eq('types', pc.photos.map(p => p.type), ['image', 'video', 'image']);
     const v = pc.photos[1];
     check('media url is the video', v.url !== v.poster, `${v.url} vs ${v.poster}`);
@@ -502,6 +569,148 @@ export async function run() {
     const res = await pc.validateSelection(files);
     check('accepted', !res.errors, errorText(res));
     eq('matched despite .HEIC in the item name', res.entries[0].videoFile.name, 'v_IMG_1001.mp4');
+  });
+
+  // ── Burst clustering ──────────────────────────────────
+  await test('a run of near-identical frames becomes one burst', async () => {
+    const files = await burstExport([7, 7, 7, 41, 99, 123]);
+    const res = await pc.validateSelection(files);
+    check('accepted', !res.errors, errorText(res));
+    await pc.startSession(res.entries, res.manifest);
+    eq('burst review opened', pc.activeScreen(), 'burst');
+    eq('one cluster', pc.burstQueue.length + 1, 1 + 0);
+    eq('three frames in it', pc.burstCurrent.photos.length, 3);
+    eq('the three are the matching ones', pc.burstCurrent.photos.map(p => p.idx).sort((a, b) => a - b), [1, 2, 3]);
+    eq('a card per frame', burstCards().length, 3);
+  });
+
+  await test('flat images are never clustered', async () => {
+    // The existing fixtures are solid colours. Their hashes carry no structure,
+    // so treating them as "similar" would cluster the whole export into one burst.
+    const res = await pc.validateSelection(await goodExport(6));
+    await pc.startSession(res.entries, res.manifest);
+    eq('straight to swiping', pc.activeScreen(), 'swiper');
+    eq('no clusters', pc.burstQueue.length, 0);
+  });
+
+  await test('the sharpest frame leads and is pre-ticked', async () => {
+    const files = await burstExport([[7, false], [7, true], [7, false], 41]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    eq('cluster of three', pc.burstCurrent.photos.length, 3);
+    eq('the detailed frame is first', pc.burstCurrent.photos[0].idx, 2);
+    eq('one ticked', pc.burstCurrent.ticked.size, 1);
+    check('and it is the first', pc.burstCurrent.ticked.has(pc.burstCurrent.photos[0]));
+    eq('first card reads as kept', burstCards()[0].classList.contains('ticked'), true);
+    eq('the rest read as deleting', burstCards()[1].classList.contains('ticked'), false);
+  });
+
+  await test('keeping four of seven is four taps and one Done', async () => {
+    const files = await burstExport([7, 7, 7, 7, 7, 7, 7]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    eq('one burst of seven', pc.burstCurrent.photos.length, 7);
+    const kept = [pc.burstCurrent.photos[0].idx];
+    // One is already ticked, so three taps add three more. The fourth tap is the
+    // one that would untick something, which is the point: keeping four costs four
+    // interactions including Done.
+    for (const n of [1, 2, 3]) {
+      await tapCard(n);
+      kept.push(pc.burstCurrent.photos[n].idx);
+    }
+    eq('four ticked', pc.burstCurrent.ticked.size, 4);
+    eq('tally says so', document.getElementById('burst-tally').textContent.replace(/\s+/g, ' '), 'Keeping 4 · Deleting 3');
+    pc.finishBurst();
+    eq('kept photos are kept', pc.indicesFor('keep').sort((a, b) => a - b), kept.sort((a, b) => a - b));
+    eq('the other three are for deletion', pc.indicesFor('delete').length, 3);
+    check('no overlap', !pc.indicesFor('delete').some(i => kept.includes(i)));
+  });
+
+  await test('kept burst photos never reappear in the swipe stack', async () => {
+    const files = await burstExport([7, 7, 7, 41]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    const decided = pc.burstCurrent.photos.map(p => p.idx);
+    pc.finishBurst();
+    eq('now swiping the singleton', pc.activeScreen(), 'swiper');
+    eq('on the one photo nobody has judged', pc.photos[pc.index].idx, 4);
+    check('every clustered photo is settled',
+      pc.photos.filter(p => decided.includes(p.idx)).every(p => p.decision !== null));
+  });
+
+  await test('the index string is exactly the unticked clustered photos', async () => {
+    const files = await burstExport([7, 7, 7, 41]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    const order = pc.burstCurrent.photos.map(p => p.idx);
+    pc.finishBurst();
+    pc.decide('keep');            // the singleton
+    const expected = order.slice(1).sort((a, b) => a - b).join(',');
+    eq('delete string', pc.buildInput(), expected);
+  });
+
+  await test('deleting a whole burst has to be confirmed', async () => {
+    const files = await burstExport([7, 7, 7]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    await tapCard(0);                     // untick the only ticked one
+    eq('nothing ticked', pc.burstCurrent.ticked.size, 0);
+    const realConfirm = window.confirm;
+    let asked = '';
+    window.confirm = (msg) => { asked = msg; return false; };
+    pc.finishBurst();
+    window.confirm = realConfirm;
+    check('it asked', /Delete all 3/.test(asked), asked);
+    eq('and nothing was decided', pc.photos.filter(p => p.decision).length, 0);
+  });
+
+  await test('Done can be taken back', async () => {
+    const files = await burstExport([7, 7, 7, 41]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    pc.finishBurst();
+    eq('decisions made', pc.photos.filter(p => p.decision).length, 3);
+    document.getElementById('undo-toast-btn').click();
+    eq('back on the burst', pc.activeScreen(), 'burst');
+    eq('nothing decided', pc.photos.filter(p => p.decision).length, 0);
+    eq('same cluster, same size', burstCards().length, 3);
+  });
+
+  await test('a photo bound for deletion can be rescued on the confirm screen', async () => {
+    const files = await burstExport([7, 7, 7]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    pc.finishBurst();
+    eq('confirm screen', pc.activeScreen(), 'confirm');
+    eq('two for deletion', pc.indicesFor('delete').length, 2);
+    document.querySelectorAll('#thumb-grid .thumb-item')[0].click();
+    eq('one rescued', pc.indicesFor('delete').length, 1);
+    eq('and it is kept', pc.indicesFor('keep').length, 2);
+  });
+
+  await test('decisions survive closing the tab', async () => {
+    pc.setPersistence(true);
+    const stamp = 'persist-' + Date.now();
+    const files = await burstExport([7, 7, 7, 41], { folder: stamp, exportedAt: stamp });
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    pc.finishBurst();
+    const before = { keep: pc.indicesFor('keep'), del: pc.indicesFor('delete') };
+    // Same folder, opened again: this is what reloading the page does.
+    const again = await pc.validateSelection(await burstExport([7, 7, 7, 41], { folder: stamp, exportedAt: stamp }));
+    await pc.startSession(again.entries, again.manifest);
+    eq('keeps came back', pc.indicesFor('keep'), before.keep);
+    eq('deletes came back', pc.indicesFor('delete'), before.del);
+    pc.forgetDecisions();
+    pc.setPersistence(false);
+  });
+
+  await test('hashing and distance', () => {
+    const a = { h0: 0, h1: 0 }, b = { h0: 1, h1: 0 }, c = { h0: 0, h1: 3 };
+    eq('identical', pc.hamming(a, a), 0);
+    eq('one bit low word', pc.hamming(a, b), 1);
+    eq('two bits high word', pc.hamming(a, c), 2);
+    eq('symmetric', pc.hamming(b, c), pc.hamming(c, b));
   });
 
   const failed = results.filter(r => !r.pass);

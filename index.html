@@ -1042,6 +1042,129 @@
       box-shadow: var(--shadow-sm);
     }
     .btn-secondary:active { transform: scale(0.985); }
+
+    /* ── BURST REVIEW ── */
+    /* A vertical feed, because comparing two nearly identical frames is a
+       back-and-forth motion and a carousel makes you pay for every reversal.
+       Snapping is mandatory by default so a flick lands on exactly one photo;
+       BURST.snapScrolling turns it off for long clusters, where free scrolling
+       may well read better. */
+    #screen-burst { flex-direction: column; background: var(--bg); }
+
+    .burst-head {
+      flex: 0 0 auto; z-index: 3;
+      padding: calc(10px + var(--safe-top)) 16px 10px;
+      background: var(--card); border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm); text-align: center;
+      font-size: 14px; font-weight: 500;
+    }
+    .burst-head small {
+      display: block; margin-top: 2px;
+      font-size: 12px; font-weight: 400; color: var(--text-light);
+    }
+
+    .burst-scroll {
+      /* min-height:0 or the footer is pushed off the screen: a flex item's default
+         min-height is its content, and the content here is a column of photos. */
+      flex: 1 1 auto; min-height: 0;
+      overflow-y: auto; overflow-x: hidden;
+      -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+      scroll-snap-type: y mandatory;
+      padding: 10px 10px 6px;
+    }
+    .burst-scroll.free { scroll-snap-type: none; }
+
+    .burst-card {
+      position: relative;
+      scroll-snap-align: center; scroll-snap-stop: always;
+      margin: 0 auto 12px; max-width: 620px;
+      border-radius: var(--radius-lg); overflow: hidden;
+      background: var(--card); box-shadow: var(--shadow-sm);
+      /* Unticked is dim AND desaturated AND labelled. Three signals, because at
+         flick speed a badge alone is not readable and colour alone is not either. */
+      opacity: 0.5; filter: grayscale(0.9) brightness(0.85);
+      transition: opacity 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease;
+    }
+    .burst-card.ticked {
+      opacity: 1; filter: none;
+      box-shadow: var(--shadow-md), inset 0 0 0 3px var(--keep);
+    }
+    /* Space is reserved from the dimensions the hashing pass measured, so the
+       column does not jump as images decode. 4/3 is only the stand-in. */
+    .burst-media { width: 100%; aspect-ratio: 4 / 3; background: #e9e3da; }
+    .burst-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+    .burst-badge {
+      position: absolute; right: 10px; bottom: 10px;
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; line-height: 1; color: #fff;
+      background: rgba(30, 27, 23, 0.5); border: 2px solid rgba(255, 255, 255, 0.85);
+      box-shadow: var(--shadow-sm);
+    }
+    .burst-card.ticked .burst-badge { background: var(--keep-bg); border-color: #fff; }
+
+    .burst-state {
+      position: absolute; left: 10px; bottom: 10px;
+      padding: 5px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: #fff; background: var(--delete-bg);
+    }
+    .burst-card.ticked .burst-state { background: var(--keep-bg); }
+
+    .burst-rank {
+      position: absolute; left: 10px; top: 10px;
+      min-width: 26px; height: 26px; padding: 0 8px; border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 600; color: #fff;
+      background: rgba(30, 27, 23, 0.55);
+    }
+    .burst-pin { right: auto; left: 44px; }
+
+    .burst-foot {
+      flex: 0 0 auto; z-index: 3;
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px calc(10px + var(--safe-bottom));
+      background: var(--card); border-top: 1px solid var(--border);
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+    }
+    .burst-tally { flex: 1 1 auto; font-size: 13px; line-height: 1.35; }
+    .burst-tally b { font-weight: 600; }
+    .burst-foot .btn-primary { width: auto; flex: 0 0 auto; padding: 12px 26px; margin: 0; }
+
+    /* Full-screen look at one frame. Double tap opens it; it never ticks. */
+    #burst-zoom {
+      display: none; position: fixed; inset: 0; z-index: 60;
+      background: rgba(12, 10, 8, 0.96);
+      align-items: center; justify-content: center;
+    }
+    #burst-zoom.open { display: flex; }
+    #burst-zoom img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    #burst-zoom-close {
+      position: absolute; top: calc(12px + var(--safe-top)); right: 14px;
+      width: 44px; height: 44px; border: none; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 20px;
+    }
+
+    .rescue-hint {
+      margin: 0 0 10px; font-size: 12px; color: var(--text-light); text-align: center;
+    }
+
+    #undo-toast {
+      display: none; position: fixed; z-index: 70;
+      left: 50%; transform: translateX(-50%);
+      bottom: calc(80px + var(--safe-bottom));
+      align-items: center; gap: 14px;
+      padding: 10px 12px 10px 18px; border-radius: 999px;
+      background: var(--text); color: #fff; font-size: 13px;
+      box-shadow: var(--shadow-md);
+    }
+    #undo-toast.open { display: flex; }
+    #undo-toast button {
+      border: none; border-radius: 999px; padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.16); color: #fff;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -1102,6 +1225,26 @@
       <button class="btn-primary" id="btn-stage-go">Continue</button>
     </div>
   </div>
+</div>
+
+<!-- BURST REVIEW: one cluster of near-duplicates at a time -->
+<div id="screen-burst" class="screen">
+  <div class="burst-head" id="burst-head">Burst</div>
+  <div class="burst-scroll" id="burst-scroll"></div>
+  <div class="burst-foot">
+    <div class="burst-tally" id="burst-tally"></div>
+    <button class="btn-primary" id="btn-burst-done">Done</button>
+  </div>
+</div>
+
+<div id="burst-zoom">
+  <img id="burst-zoom-img" alt="">
+  <button id="burst-zoom-close" aria-label="Close">✕</button>
+</div>
+
+<div id="undo-toast">
+  <span id="undo-toast-text"></span>
+  <button id="undo-toast-btn">Undo</button>
 </div>
 
 <!-- LOADING OVERLAY -->
@@ -1188,6 +1331,7 @@
     </div>
   </div>
 
+  <div class="rescue-hint" id="rescue-hint" style="display:none">Tap any photo below to keep it instead.</div>
   <div class="thumb-grid" id="thumb-grid"></div>
 
   <div id="album-section" style="display:none">
@@ -1250,6 +1394,7 @@ let sessionMuted = false;
 const screens = {
   landing: document.getElementById('screen-landing'),
   stage:   document.getElementById('screen-stage'),
+  burst:   document.getElementById('screen-burst'),
   swiper:  document.getElementById('screen-swiper'),
   confirm: document.getElementById('screen-confirm'),
 };
@@ -1588,9 +1733,10 @@ function releasePhotos() {
 
 // entries are already in the order that defines identity: for an export that is
 // ascending index, for a quick pick it is only the order the picker handed them over.
-function startSession(entries, mf) {
+async function startSession(entries, mf) {
   releasePhotos();
   manifest = mf;
+  manifestKey = manifestKeyFor(mf);
   index = 0;
   hintsShown = false;
   decisionStack = [];
@@ -1615,6 +1761,11 @@ function startSession(entries, mf) {
     };
   });
 
+  // Decisions made in an earlier sitting come back before anything is shown, so a
+  // half-finished export picks up where it was left rather than starting again.
+  await restoreDecisions();
+  await prepareBursts();
+
   const kinds = [...new Set(photos.map(p => p.kind).filter(Boolean))]
     .sort((a, b) => {
       const ai = KIND_ORDER.indexOf(a), bi = KIND_ORDER.indexOf(b);
@@ -1622,7 +1773,7 @@ function startSession(entries, mf) {
     });
 
   if (kinds.length) startStaging(kinds);
-  else enterSwiper();
+  else afterStaging();
 }
 
 // Enters the swipe stack at the first item nobody has decided on yet — staging
@@ -1653,7 +1804,7 @@ fileInput.addEventListener('change', async () => {
   resetSelectButton();
   if (result.errors) { showLoadError(result.errors, result.diag); return; }
 
-  startSession(result.entries, result.manifest);
+  await startSession(result.entries, result.manifest);
 });
 
 // ── Staging (grid pre-pass) ─────────────────────────────
@@ -1684,7 +1835,7 @@ function nextStage() {
     const items = photos.filter(p => p.kind === kind && p.decision === null);
     if (items.length) { renderStage(kind, items); return; }
   }
-  enterSwiper();
+  afterStaging();
 }
 
 function renderStage(kind, items) {
@@ -1760,6 +1911,7 @@ function commitStage() {
     p.decision = 'delete';
     decisionStack.push(i);
   });
+  persistDecisions();
   nextStage();
 }
 
@@ -1769,6 +1921,650 @@ btnStageAll.addEventListener('click', () => {
   stagePicked = new Set(stageItems);
   commitStage();
 });
+
+// ── Burst clustering ────────────────────────────────────
+// A burst is a run of near-identical frames. Swiping each one in turn is the
+// worst case for the swipe stack: every decision is a comparison with a photo
+// that is no longer on screen. So bursts are pulled out and reviewed as a
+// vertical feed, where flicking up and back is the comparison.
+//
+// Every number that decides what counts as a burst lives here, because every one
+// of them wants tuning against a real library rather than against an argument.
+const BURST = {
+  // Hamming distance between two 64-bit dHashes, below which two frames are
+  // candidates. ~10 is the usual near-duplicate line; lower is stricter.
+  maxHamming: 10,
+  // The spec asks for a capture-time window as well, and the export does not
+  // write capture times — no per-asset dates in the manifest, and Convert Image
+  // strips EXIF on the way out. What it does guarantee is the ordering: the album
+  // is Date Taken ascending, so position *is* time order, and a gap in index is a
+  // monotonic stand-in for a gap in time. This is the whole of the time test.
+  //
+  // What that costs: the window is measured in photos, not seconds, so a burst
+  // shot around a couple of unrelated frames still joins up, and two similar
+  // photos from different days sitting next to each other in a thin export are
+  // not separated. Nothing here can tell the difference. If that turns out to
+  // matter, the fix is a dates sidecar from the export, not a cleverer threshold.
+  maxIndexGap: 4,
+  // Mean pairwise distance above which a cluster is "loose" — related but not
+  // interchangeable. Those are pre-ticked whole: a wrongly deleted photo costs
+  // very much more than a missed de-duplication.
+  looseMeanDistance: 7,
+  // Quality versus difference when filling the slots after the first. Higher
+  // favours the sharper frame, lower favours the more different one.
+  mmrLambda: 0.6,
+  minClusterSize: 2,
+  // Snapping first, per the spec. Long clusters may read better scrolling free;
+  // this is the flag to find out with.
+  snapScrolling: true,
+  // Clusters above this many photos drop to free scrolling when snapping is off.
+  freeScrollAbove: 10,
+};
+
+// Image analysis. Deliberately free of anything in this scope: it is stringified
+// verbatim into a worker, so a reference to an outer name would only fail there.
+function burstAnalyse(bitmap) {
+  const mk = (w, h) => (typeof OffscreenCanvas !== 'undefined')
+    ? new OffscreenCanvas(w, h)
+    : Object.assign(document.createElement('canvas'), { width: w, height: h });
+
+  // dHash: 9x8 grey, each pixel against the one to its right. 64 bits.
+  const dw = 9, dh = 8;
+  let cv = mk(dw, dh);
+  let ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, dw, dh);
+  const small = ctx.getImageData(0, 0, dw, dh).data;
+  const grey = new Float32Array(dw * dh);
+  for (let i = 0; i < dw * dh; i++) {
+    grey[i] = 0.299 * small[i * 4] + 0.587 * small[i * 4 + 1] + 0.114 * small[i * 4 + 2];
+  }
+  let h0 = 0, h1 = 0, bit = 0;
+  for (let y = 0; y < dh; y++) {
+    for (let x = 0; x < dw - 1; x++) {
+      const on = grey[y * dw + x] > grey[y * dw + x + 1] ? 1 : 0;
+      if (bit < 32) h0 = (h0 | (on << bit)) >>> 0;
+      else h1 = (h1 | (on << (bit - 32))) >>> 0;
+      bit++;
+    }
+  }
+
+  // Quality: variance of the Laplacian for sharpness, and how much of the
+  // histogram is pinned at either end for clipping.
+  //
+  // 192 and not 64. Sharpness is a property of fine detail, so it has to be
+  // measured at a scale that still has some: downsampled to 64 the difference
+  // between a crisp frame and a slightly soft one of the same shot disappears
+  // entirely, and the ranker then orders a burst by nothing at all. The export's
+  // own JPEGs are 800px wide, so 192 keeps real focus differences visible while
+  // still being a thirtieth of the pixels.
+  const qs = 192;
+  cv = mk(qs, qs);
+  ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, qs, qs);
+  const px = ctx.getImageData(0, 0, qs, qs).data;
+  const lum = new Float32Array(qs * qs);
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < qs * qs; i++) {
+    const v = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2];
+    lum[i] = v;
+    hist[v < 0 ? 0 : v > 255 ? 255 : v | 0]++;
+  }
+  let sum = 0, sumSq = 0, n = 0;
+  for (let y = 1; y < qs - 1; y++) {
+    for (let x = 1; x < qs - 1; x++) {
+      const i = y * qs + x;
+      const l = 4 * lum[i] - lum[i - 1] - lum[i + 1] - lum[i - qs] - lum[i + qs];
+      sum += l; sumSq += l * l; n++;
+    }
+  }
+  const sharp = n ? Math.max(0, sumSq / n - (sum / n) * (sum / n)) : 0;
+  let clipped = 0;
+  for (let v = 0; v < 6; v++) clipped += hist[v];
+  for (let v = 250; v < 256; v++) clipped += hist[v];
+
+  return {
+    h0: h0, h1: h1,
+    sharp: sharp,
+    clip: clipped / (qs * qs),
+    w: bitmap.width, h: bitmap.height,
+  };
+}
+
+function hamming(a, b) {
+  let d = 0;
+  for (let x of [(a.h0 ^ b.h0) >>> 0, (a.h1 ^ b.h1) >>> 0]) {
+    while (x) { x &= x - 1; d++; }
+  }
+  return d;
+}
+
+// A hash with no bits set, or every bit set, came from an image with no
+// horizontal structure at all — a blank frame, or a solid colour. "Similar to"
+// means nothing there, and every such photo would otherwise cluster with every
+// other one, so they stay singletons.
+function degenerate(a) {
+  return (a.h0 === 0 && a.h1 === 0) || ((a.h0 >>> 0) === 0xffffffff && (a.h1 >>> 0) === 0xffffffff);
+}
+
+// ── Analysis: worker first, main thread if that is not available ──
+let burstWorker = null;
+let burstWorkerJobs = new Map();
+let burstWorkerSeq = 0;
+
+function startBurstWorker() {
+  if (burstWorker !== null) return burstWorker;
+  try {
+    const src = burstAnalyse.toString() + `
+self.onmessage = async (e) => {
+  const d = e.data;
+  try {
+    const bmp = await createImageBitmap(d.blob);
+    const r = burstAnalyse(bmp);
+    if (bmp.close) bmp.close();
+    r.id = d.id;
+    self.postMessage(r);
+  } catch (err) {
+    self.postMessage({ id: d.id, error: String(err) });
+  }
+};`;
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    w.onmessage = (e) => {
+      const job = burstWorkerJobs.get(e.data.id);
+      if (!job) return;
+      burstWorkerJobs.delete(e.data.id);
+      job(e.data.error ? null : e.data);
+    };
+    w.onerror = () => { burstWorker = false; };
+    burstWorker = w;
+  } catch (_) {
+    burstWorker = false;
+  }
+  return burstWorker;
+}
+
+async function bitmapFor(file) {
+  if (typeof createImageBitmap === 'function') return createImageBitmap(file);
+  const url = URL.createObjectURL(file);
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('decode failed'));
+      img.src = url;
+    });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
+function analyseInWorker(file) {
+  const w = startBurstWorker();
+  if (!w) return null;
+  const id = ++burstWorkerSeq;
+  return new Promise(resolve => {
+    burstWorkerJobs.set(id, resolve);
+    w.postMessage({ id, blob: file });
+  });
+}
+
+async function analyseFile(file) {
+  const viaWorker = analyseInWorker(file);
+  if (viaWorker) {
+    const r = await viaWorker;
+    if (r) return r;
+  }
+  try {
+    const bmp = await bitmapFor(file);
+    const r = burstAnalyse(bmp);
+    if (bmp.close) bmp.close();
+    return r;
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Persistence ─────────────────────────────────────────
+// Hashes are cached so a folder opened twice is not decoded twice, and decisions
+// are stored so closing the tab mid-session is not a lost session. Both are keyed
+// by the export, so two exports never see each other's answers.
+const DB_NAME = 'photo-curator';
+// Bumped when the analysis changes meaning. A cached hash from an older
+// algorithm is not wrong, it is incomparable, which is worse.
+const DB_VERSION = 2;
+const STORE_ANALYSIS = 'analysis';
+const STORE_DECISIONS = 'decisions';
+let dbPromise = null;
+let persistenceEnabled = true;
+let manifestKey = '';
+
+function manifestKeyFor(mf) {
+  const src = [mf && mf.folder, mf && mf.count, mf && mf.exportedAt,
+               mf && mf.first, mf && mf.last].join('|');
+  let h = 5381;
+  for (let i = 0; i < src.length; i++) h = ((h * 33) ^ src.charCodeAt(i)) >>> 0;
+  return h.toString(36) + '-' + (mf && mf.count || 0);
+}
+
+function openDB() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open(DB_NAME, DB_VERSION); } catch (_) { return resolve(null); }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      // Decisions are the user's and survive. Analysis is derived, so an upgrade
+      // throws it away rather than mixing two generations of scores in one cluster.
+      if (db.objectStoreNames.contains(STORE_ANALYSIS)) db.deleteObjectStore(STORE_ANALYSIS);
+      db.createObjectStore(STORE_ANALYSIS);
+      if (!db.objectStoreNames.contains(STORE_DECISIONS)) db.createObjectStore(STORE_DECISIONS);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  });
+  return dbPromise;
+}
+
+function dbRun(store, mode, fn) {
+  return openDB().then(db => {
+    if (!db) return null;
+    return new Promise(resolve => {
+      let tx;
+      try { tx = db.transaction(store, mode); } catch (_) { return resolve(null); }
+      const req = fn(tx.objectStore(store));
+      tx.onerror = () => resolve(null);
+      tx.onabort = () => resolve(null);
+      if (req) { req.onsuccess = () => resolve(req.result); req.onerror = () => resolve(null); }
+      else tx.oncomplete = () => resolve(null);
+    });
+  }).catch(() => null);
+}
+
+function keyRangeFor(prefix) {
+  try { return IDBKeyRange.bound(prefix, prefix + '￿'); } catch (_) { return null; }
+}
+
+async function loadCachedAnalysis() {
+  if (!persistenceEnabled || !manifestKey) return new Map();
+  const range = keyRangeFor(manifestKey + ':');
+  if (!range) return new Map();
+  const out = new Map();
+  await dbRun(STORE_ANALYSIS, 'readonly', store => {
+    const req = store.openCursor(range);
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (!cur) return;
+      out.set(String(cur.key).slice((manifestKey + ':').length), cur.value);
+      cur.continue();
+    };
+    return null;
+  });
+  return out;
+}
+
+function cacheAnalysis(idx, value) {
+  if (!persistenceEnabled || !manifestKey) return;
+  dbRun(STORE_ANALYSIS, 'readwrite', store => store.put(value, manifestKey + ':' + idx));
+}
+
+function persistDecisions() {
+  if (!persistenceEnabled || !manifestKey) return;
+  dbRun(STORE_DECISIONS, 'readwrite', store => {
+    photos.forEach(p => {
+      const key = manifestKey + ':' + p.idx;
+      if (p.decision === null) store.delete(key);
+      else store.put(p.decision, key);
+    });
+    return null;
+  });
+}
+
+function forgetDecisions() {
+  if (!manifestKey) return;
+  const range = keyRangeFor(manifestKey + ':');
+  if (range) dbRun(STORE_DECISIONS, 'readwrite', store => store.delete(range));
+}
+
+async function restoreDecisions() {
+  if (!persistenceEnabled || !manifestKey) return 0;
+  const range = keyRangeFor(manifestKey + ':');
+  if (!range) return 0;
+  const byIdx = new Map();
+  await dbRun(STORE_DECISIONS, 'readonly', store => {
+    const req = store.openCursor(range);
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (!cur) return;
+      byIdx.set(String(cur.key).slice((manifestKey + ':').length), cur.value);
+      cur.continue();
+    };
+    return null;
+  });
+  let restored = 0;
+  photos.forEach(p => {
+    const d = byIdx.get(String(p.idx));
+    if (d === 'keep' || d === 'delete' || d === 'album') { p.decision = d; restored++; }
+  });
+  return restored;
+}
+
+// ── Building the clusters ───────────────────────────────
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingLabel = document.getElementById('loading-label');
+
+function showProgress(text) {
+  loadingLabel.textContent = text;
+  loadingOverlay.classList.add('active');
+}
+function hideProgress() { loadingOverlay.classList.remove('active'); }
+
+let burstQueue = [];       // clusters still to review
+let burstCurrent = null;   // { photos: [...], ticked: Set, loose: bool }
+let burstDone = 0;         // how many have been finished, for the header
+let burstUndo = null;      // pre-Done snapshot, for the undo affordance
+
+// Videos are left out. Their still is a poster frame written by the export, and a
+// burst of videos is not a thing this library produces; excluding them keeps the
+// hashing pass to one decode per photo.
+async function prepareBursts() {
+  const candidates = photos.filter(p => p.type === 'image');
+  if (candidates.length < BURST.minClusterSize) { burstQueue = []; return; }
+
+  const cached = await loadCachedAnalysis();
+  let done = 0;
+  const pending = candidates.filter(p => {
+    const hit = cached.get(String(p.idx));
+    if (hit) { p.analysis = hit; done++; return false; }
+    return true;
+  });
+
+  if (pending.length) {
+    showProgress(`Looking for bursts… ${done} / ${candidates.length}`);
+    for (const p of pending) {
+      const r = await analyseFile(p.file);
+      if (r) { p.analysis = r; cacheAnalysis(p.idx, r); }
+      done++;
+      if (done % 4 === 0 || done === candidates.length) {
+        showProgress(`Looking for bursts… ${done} / ${candidates.length}`);
+        await new Promise(r2 => setTimeout(r2, 0));
+      }
+    }
+    hideProgress();
+  }
+
+  burstQueue = clusterPhotos(candidates).map(makeCluster);
+  burstDone = 0;
+}
+
+// Transitive grouping over pairs that are both close enough in the hash and close
+// enough in position. Union-find, so a chain of frames ends up as one burst.
+function clusterPhotos(list) {
+  const usable = list.filter(p => p.analysis && !degenerate(p.analysis))
+                     .sort((a, b) => a.idx - b.idx);
+  const parent = usable.map((_, i) => i);
+  const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const union = (i, j) => { const a = find(i), b = find(j); if (a !== b) parent[b] = a; };
+
+  for (let i = 0; i < usable.length; i++) {
+    for (let j = i + 1; j < usable.length; j++) {
+      if (usable[j].idx - usable[i].idx > BURST.maxIndexGap) break;
+      if (hamming(usable[i].analysis, usable[j].analysis) <= BURST.maxHamming) union(i, j);
+    }
+  }
+
+  const groups = new Map();
+  usable.forEach((p, i) => {
+    const root = find(i);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(p);
+  });
+  return [...groups.values()]
+    .filter(g => g.length >= BURST.minClusterSize)
+    .sort((a, b) => a[0].idx - b[0].idx);
+}
+
+// Quality in 0..1: sharpness as a fraction of the best frame in the cluster, less
+// a penalty for clipping.
+//
+// A fraction of the best, not a position between best and worst. Stretching the
+// cluster's own span to 0..1 turns a four percent difference in sharpness into a
+// full-scale difference in quality, which then swamps the distance term below —
+// so a burst of five identical frames ordered itself by a rounding error and the
+// one genuinely different frame came last. Measured against the best frame, near
+// ties score near 1 and the ordering falls back to difference, which is the
+// behaviour worth having.
+function qualityScores(group) {
+  const sharp = group.map(p => p.analysis.sharp);
+  const hi = Math.max(...sharp, 1e-6);
+  return group.map((p, i) =>
+    Math.max(0, Math.min(1, sharp[i] / hi) - Math.min(1, p.analysis.clip * 1.5)));
+}
+
+// Slot one is the best photo. Every slot after it is maximal marginal relevance:
+// quality traded against distance from what is already placed, so the second card
+// is the best *different* frame rather than the second-sharpest near-copy.
+function rankCluster(group) {
+  const q = qualityScores(group);
+  const remaining = group.map((p, i) => i);
+  const order = [];
+  let best = 0;
+  remaining.forEach(i => { if (q[i] > q[best]) best = i; });
+  order.push(best);
+  remaining.splice(remaining.indexOf(best), 1);
+
+  while (remaining.length) {
+    let pick = remaining[0], pickScore = -Infinity;
+    for (const i of remaining) {
+      let nearest = 64;
+      for (const j of order) {
+        nearest = Math.min(nearest, hamming(group[i].analysis, group[j].analysis));
+      }
+      const score = BURST.mmrLambda * q[i] + (1 - BURST.mmrLambda) * (nearest / 64);
+      if (score > pickScore) { pickScore = score; pick = i; }
+    }
+    order.push(pick);
+    remaining.splice(remaining.indexOf(pick), 1);
+  }
+  return order.map(i => group[i]);
+}
+
+function meanPairwiseDistance(group) {
+  let total = 0, pairs = 0;
+  for (let i = 0; i < group.length; i++) {
+    for (let j = i + 1; j < group.length; j++) {
+      total += hamming(group[i].analysis, group[j].analysis); pairs++;
+    }
+  }
+  return pairs ? total / pairs : 0;
+}
+
+// The manifest carries no favourite or edited flags — the export cannot ask Photos
+// for them without a change to the Shortcut, which is out of scope here. If they
+// ever arrive, this is the only place that has to know: pinned photos are
+// pre-ticked and stay pre-ticked, and the ranking is otherwise unchanged.
+function pinnedIn(group) {
+  return new Set(group.filter(p => p.favourite || p.edited));
+}
+
+function makeCluster(group) {
+  const ranked = rankCluster(group);
+  const pinned = pinnedIn(ranked);
+  const loose = meanPairwiseDistance(ranked) > BURST.looseMeanDistance;
+  const ticked = new Set(loose ? ranked : [ranked[0]]);
+  pinned.forEach(p => ticked.add(p));
+  return { photos: ranked, ticked, pinned, loose };
+}
+
+// ── Burst review screen ─────────────────────────────────
+const burstHead = document.getElementById('burst-head');
+const burstScroll = document.getElementById('burst-scroll');
+const burstTally = document.getElementById('burst-tally');
+const btnBurstDone = document.getElementById('btn-burst-done');
+const burstZoom = document.getElementById('burst-zoom');
+const burstZoomImg = document.getElementById('burst-zoom-img');
+const undoToast = document.getElementById('undo-toast');
+const undoToastText = document.getElementById('undo-toast-text');
+let undoTimer = null;
+
+function nextBurst() {
+  if (!burstQueue.length) { enterSwiper(); return; }
+  burstCurrent = burstQueue.shift();
+  renderBurst();
+}
+
+function renderBurst() {
+  const cluster = burstCurrent;
+  const total = burstDone + burstQueue.length + 1;
+  burstHead.innerHTML =
+    `Burst ${burstDone + 1} of ${total} · ${cluster.photos.length} photos` +
+    `<small>${cluster.loose
+      ? 'Loosely related, so everything starts kept — untick what you do not want.'
+      : 'Best frame first. Tap to keep, double tap for a closer look.'}</small>`;
+
+  const free = !BURST.snapScrolling || cluster.photos.length > BURST.freeScrollAbove;
+  burstScroll.classList.toggle('free', free);
+  burstScroll.innerHTML = '';
+  cluster.photos.forEach((p, i) => burstScroll.appendChild(burstCard(cluster, p, i)));
+  burstScroll.scrollTop = 0;
+  updateBurstTally();
+  showScreen('burst');
+}
+
+function burstCard(cluster, p, i) {
+  const card = document.createElement('div');
+  card.className = 'burst-card';
+
+  const media = document.createElement('div');
+  media.className = 'burst-media';
+  // Reserve the real shape before the image decodes. The hashing pass measured it,
+  // which is why there is no layout shift and why the manifest does not need to
+  // carry dimensions it has never had.
+  if (p.analysis && p.analysis.w && p.analysis.h) {
+    media.style.aspectRatio = `${p.analysis.w} / ${p.analysis.h}`;
+  }
+  const img = document.createElement('img');
+  img.alt = p.name || '';
+  img.loading = i < 2 ? 'eager' : 'lazy';
+  img.decoding = 'async';
+  img.src = p.thumb || p.poster || p.url;
+  media.appendChild(img);
+
+  const rank = document.createElement('div');
+  rank.className = 'burst-rank';
+  rank.textContent = cluster.pinned.has(p) ? `${i + 1} ★` : String(i + 1);
+
+  const state = document.createElement('div');
+  state.className = 'burst-state';
+
+  const badge = document.createElement('button');
+  badge.className = 'burst-badge';
+  badge.setAttribute('aria-label', 'Keep this photo');
+
+  card.append(media, rank, state, badge);
+  card._photo = p;
+  card._state = state;
+  card._badge = badge;
+  paintCard(cluster, card);
+
+  // One tap toggles, two opens the photo. The single tap has to wait out the
+  // double-tap window, otherwise every zoom flickers the tick on its way open.
+  let tapTimer = null;
+  const toggle = () => {
+    if (cluster.ticked.has(p)) cluster.ticked.delete(p); else cluster.ticked.add(p);
+    paintCard(cluster, card);
+    updateBurstTally();
+  };
+  card.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (tapTimer) {
+      clearTimeout(tapTimer); tapTimer = null;
+      openBurstZoom(p);
+      return;
+    }
+    tapTimer = setTimeout(() => { tapTimer = null; toggle(); }, 230);
+  });
+  return card;
+}
+
+function paintCard(cluster, card) {
+  const on = cluster.ticked.has(card._photo);
+  card.classList.toggle('ticked', on);
+  card._state.textContent = on ? 'Keeping' : 'Deleting';
+  card._badge.textContent = on ? '✓' : '○';
+}
+
+function updateBurstTally() {
+  const keep = burstCurrent.ticked.size;
+  const drop = burstCurrent.photos.length - keep;
+  burstTally.innerHTML = `Keeping <b>${keep}</b> · Deleting <b>${drop}</b>`;
+  btnBurstDone.textContent = 'Done';
+}
+
+function openBurstZoom(p) {
+  burstZoomImg.src = p.poster || p.url;
+  burstZoom.classList.add('open');
+}
+document.getElementById('burst-zoom-close').addEventListener('click', () => {
+  burstZoom.classList.remove('open');
+  burstZoomImg.src = '';
+});
+burstZoom.addEventListener('click', (e) => {
+  if (e.target === burstZoom) document.getElementById('burst-zoom-close').click();
+});
+
+// Done is the only way out, and it is the only destructive press on this screen,
+// so binning a whole burst has to be asked for rather than fallen into.
+function finishBurst() {
+  const cluster = burstCurrent;
+  const drop = cluster.photos.filter(p => !cluster.ticked.has(p));
+  if (!cluster.ticked.size &&
+      !confirm(`Delete all ${cluster.photos.length} photos in this burst?`)) return;
+
+  burstUndo = {
+    cluster,
+    before: cluster.photos.map(p => p.decision),
+    queue: burstQueue.slice(),
+    done: burstDone,
+  };
+  cluster.photos.forEach(p => {
+    p.decision = cluster.ticked.has(p) ? 'keep' : 'delete';
+  });
+  persistDecisions();
+  burstDone++;
+  showUndoToast(`${cluster.ticked.size} kept · ${drop.length} to delete`);
+  nextBurst();
+}
+btnBurstDone.addEventListener('click', finishBurst);
+
+function showUndoToast(text) {
+  undoToastText.textContent = text;
+  undoToast.classList.add('open');
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndoToast, 6000);
+}
+function hideUndoToast() {
+  undoToast.classList.remove('open');
+  clearTimeout(undoTimer);
+}
+document.getElementById('undo-toast-btn').addEventListener('click', () => {
+  if (!burstUndo) return;
+  const u = burstUndo;
+  u.cluster.photos.forEach((p, i) => { p.decision = u.before[i]; });
+  burstQueue = [u.cluster].concat(u.queue);
+  burstDone = u.done;
+  burstUndo = null;
+  persistDecisions();
+  hideUndoToast();
+  nextBurst();
+});
+
+// Where the flow goes once the category grids are finished: bursts first, then
+// whatever is left goes through the swipe stack exactly as it always has.
+function afterStaging() {
+  burstQueue = burstQueue.filter(c => c.photos.some(p => p.decision === null));
+  if (burstQueue.length) nextBurst();
+  else enterSwiper();
+}
 
 // ── Thumb strip ─────────────────────────────────────────
 const thumbStrip = document.getElementById('thumb-strip');
@@ -1996,6 +2792,7 @@ function undo() {
   hideEndOfStack();
   const lastDecided = decisionStack.pop();
   photos[lastDecided].decision = null;
+  persistDecisions();
   if (stripThumbs[lastDecided]) stripThumbs[lastDecided].style.display = '';
   index = lastDecided;
   photoContainer.classList.remove('animating');
@@ -2041,6 +2838,7 @@ function decide(action) {
   const decidedIndex = index;
   photos[decidedIndex].decision = action;
   decisionStack.push(decidedIndex);
+  persistDecisions();
   if (stripThumbs[decidedIndex]) stripThumbs[decidedIndex].style.display = 'none';
 
   decisionOverlay.className = action;
@@ -2279,6 +3077,8 @@ function showConfirm() {
      took && `exported in ${took}`]
       .filter(Boolean).join(' · ');
   document.getElementById('delete-index-summary').textContent = describeIndices(indicesFor('delete'));
+  document.getElementById('rescue-hint').style.display =
+    photos.some(p => p.decision === 'delete') ? '' : 'none';
   document.getElementById('album-index-summary').textContent  = describeIndices(indicesFor('album'));
   document.getElementById('btn-copy').textContent = 'Copy delete indices';
   btnDelete.textContent = 'Delete';
@@ -2330,7 +3130,22 @@ function showConfirm() {
   } else {
     btnDelete.style.display = '';
     btnDelete.classList.remove('btn-finish');
-    toDelete.forEach(p => thumbGrid.appendChild(buildThumbItem(p, '✕', null)));
+    // The last look before any string is generated, and the last chance to take
+    // something back out. Tapping a thumbnail rescues it: burst review moves fast
+    // by design, and the cost of a wrong tick has to stay one tap.
+    toDelete.forEach(p => {
+      const item = buildThumbItem(p, '✕', null);
+      item.title = 'Tap to keep this one';
+      item.addEventListener('click', () => {
+        p.decision = 'keep';
+        const i = photos.indexOf(p);
+        const at = decisionStack.lastIndexOf(i);
+        if (at !== -1) decisionStack.splice(at, 1);
+        persistDecisions();
+        showConfirm();
+      });
+      thumbGrid.appendChild(item);
+    });
   }
 
   const albumSection = document.getElementById('album-section');
@@ -2414,6 +3229,10 @@ btnCopy.addEventListener('click', () => {
 // ── Restart swiping (same photos, reset decisions) ──────
 document.getElementById('btn-reswipe').addEventListener('click', () => {
   photos.forEach(p => { p.decision = null; });
+  forgetDecisions();
+  burstQueue = [];
+  burstUndo = null;
+  hideUndoToast();
   index = 0;
   decisionStack = [];
   hideEndOfStack();
@@ -2447,6 +3266,11 @@ if (new URLSearchParams(location.search).has('test')) {
     buildInput, buildAlbumInput, indicesFor, parseIndexedName,
     parseExportDate, exportDuration,
     normaliseAssetName, isVideoFile, commitStage,
+    BURST, burstAnalyse, hamming, clusterPhotos, rankCluster, finishBurst,
+    manifestKeyFor, restoreDecisions, persistDecisions, forgetDecisions,
+    setPersistence(on) { persistenceEnabled = !!on; },
+    get burstQueue() { return burstQueue; },
+    get burstCurrent() { return burstCurrent; },
     get photos() { return photos; },
     get index() { return index; },
     get manifest() { return manifest; },

@@ -21,8 +21,16 @@ console.table((await m.run()).failures);
 ## What is covered
 
 The guard (every rejection path), index parsing, category sidecars, the staging grid,
-quick pick, the index strings that go to Shortcuts, and the confirm screen's two modes.
-What is *not* covered is touch handling and video playback, which need a real device.
+quick pick, the index strings that go to Shortcuts, the confirm screen's two modes, and
+burst clustering end to end — grouping, ranking, ticking, Done, undo, rescue and
+persistence. What is *not* covered is touch handling and video playback, which need a
+real device.
+
+The burst fixtures draw a seeded block pattern rather than a flat colour, because a flat
+image has no structure for a perceptual hash to compare and the app deliberately refuses
+to cluster those. `patternFile(name, seed, detail)` is the knob: same seed means
+near-identical frames, `detail` adds faint fine lines that lift sharpness without moving
+the hash much.
 
 ## Shortcuts
 
