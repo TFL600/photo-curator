@@ -191,12 +191,30 @@ def _export_body():
     """Everything after the Triage album has been filled: files and manifest."""
     acts = []
 
-    # The export folder has to be new every run: a folder cannot be cleared from a
-    # Shortcut (Get Contents of Folder needs a security-scoped bookmark that only a
-    # picker can create), so writing into a shared folder leaves stale files from a
-    # larger previous export behind. Name it from the item count and the first
-    # asset's name, both of which are already to hand and are path-safe. Asset
-    # names turn out to be UUIDs, which makes collisions a non-issue.
+    # Clear out every previous export first.
+    #
+    # Get Contents of Folder really does need a security-scoped bookmark, but Get
+    # File does not: handed a path with the picker switched off it returns the
+    # folder, and Delete Files removes it outright. Verified on this Mac on
+    # 2026-09-12, fixture and all, in tools/probe_cleanup.py.
+    #
+    # Doing this *before* writing anything, rather than filtering the new folder
+    # out afterwards, avoids needing an "is not" comparison — the one filter
+    # operator that has never been verified here. It costs nothing either: the
+    # album rebuild above has already happened, so every older folder's indices
+    # now point at a Triage album that no longer exists. Stale folders were never
+    # just clutter; they were a wrong-deletion waiting to happen.
+    #
+    # The repeat is the guard. An empty result means zero iterations, which is how
+    # you avoid asking Delete Files what it does with nothing.
+    old = uid()
+    acts.append(action('is.workflow.actions.documentpicker.open', UUID=old,
+                       WFGetFilePath=EXPORT_ROOT, WFShowFilePicker=False,
+                       WFFileErrorIfNotFound=False))
+    acts += repeat_each(out(old, 'File'), [
+        action('is.workflow.actions.file.delete', UUID=uid(),
+               WFInput=var('Repeat Item'), WFDeleteImmediatelyDelete=True)])
+
     setu = uid()
     acts.append(find_triage(setu))
     acts.append(set_var('Assets', out(setu, 'Photos')))
@@ -210,10 +228,7 @@ def _export_body():
     acts.append(action('is.workflow.actions.getitemname', UUID=firstn,
                        WFInput=out(firstu, 'Item from List')))
     acts.append(set_var('First', out(firstn, 'Name')))
-    stampu = uid()
-    acts.append(action('is.workflow.actions.gettext', UUID=stampu,
-                       WFTextActionText=text('{}-{}', var('Total'), var('First'))))
-    acts.append(set_var('Stamp', out(stampu, 'Text')))
+    acts += _folder_name()
 
     # Category sidecars. Names only — they steer the staging grid in the app and
     # nothing else, so a filename collision costs a mis-staged thumbnail. Names
@@ -346,17 +361,59 @@ def _export_body():
                       text(EXPORT_ROOT + '/{}/manifest.json', var('Stamp')),
                       out(manifest, 'Text'))
 
-    acts.append(action(
-        'is.workflow.actions.notification',
-        WFNotificationActionBody=text(
-            'Triage export ready (build ' + BUILD_PLACEHOLDER + '): {} items in {}. '
-            '{} of them videos. Scanned {} screenshots, {} videos. '
-            'Started {}, finished {}.',
-            var('Total'), var('Stamp'), var('VidsHere'), var('ShotsSeen'),
-            var('VidsSeen'), var('StartedAt'), out(ended, 'Date')),
-        WFNotificationActionTitle='Photo Curator',
-        WFInputIsShownAsAttachment=False))
+    # No finish notification. There was one, reporting counts and the build stamp,
+    # and it was removed on the phone on purpose: a daily automation that announces
+    # itself every morning is noise, and the counts it carried were debugging aids
+    # from the week the export was being got working. What replaced it is the
+    # manifest, which is written last — a folder without one is a run that died,
+    # and the app already refuses to load that folder.
+    return acts
 
+
+def _folder_name():
+    """Sets Stamp to something like "12 Sep 2026 (19)".
+
+    The folder used to be named `<count>-<first asset name>`, which is a UUID —
+    unreadable, and it collided twice in one week because consecutive exports
+    share a first asset. The date is what you actually need to pick the right
+    folder in the Files picker.
+
+    Getting a date into a string without Format Date, which produces an empty
+    string here and did so again on 2026-09-12 on this Mac, so it is not a phone
+    problem and there is no point trying it a third time. Replace Text is no help
+    either: its output came back empty under every input key tried. Split Text
+    does work — it is what Delete Photos By Index already runs on — so the date
+    token is coerced to text and then cut down.
+
+    Two cuts. " at " takes the time off, which is the whole point. The second
+    split on ":" only matters if the device ever renders a date this code has not
+    seen: a colon in WFFileDestinationPath is a path separator's worth of trouble,
+    and losing the minutes is a much better failure than losing the export.
+
+    Same-day re-runs collide by design. The cleanup above has already removed the
+    earlier folder, so there is nothing to collide with, and a name that repeats
+    is better than a second folder to choose between.
+    """
+    d, txt = uid(), uid()
+    acts = [
+        action('is.workflow.actions.date', UUID=d, WFDateActionMode='Current Date'),
+        action('is.workflow.actions.gettext', UUID=txt,
+               WFTextActionText=text('{}', out(d, 'Date'))),
+    ]
+    part = out(txt, 'Text')
+    for sep in (' at ', ':'):
+        sp, it = uid(), uid()
+        acts += [
+            action('is.workflow.actions.text.split', UUID=sp, text=part,
+                   WFTextSeparator='Custom', WFTextCustomSeparator=sep),
+            action('is.workflow.actions.getitemfromlist', UUID=it,
+                   WFInput=out(sp, 'Split Text'), WFItemSpecifier='First Item'),
+        ]
+        part = out(it, 'Item from List')
+    stamp = uid()
+    acts.append(action('is.workflow.actions.gettext', UUID=stamp,
+                       WFTextActionText=text('{} ({})', part, var('Total'))))
+    acts.append(set_var('Stamp', out(stamp, 'Text')))
     return acts
 
 
@@ -454,15 +511,10 @@ def build_delete():
     acts.append(find_triage(survivors))
     acts += add_each_to_album(out(survivors, 'Photos'), TRIAGED_ALBUM)
 
-    done = uid()
-    acts.append(action('is.workflow.actions.count', UUID=done,
-                       Input=var('Targets'), WFCountType='Items'))
-    acts.append(action('is.workflow.actions.showresult',
-                       Text=text('Asked to delete {} of {}. Album was {}, now {} — '
-                                 'if those two are equal nothing was deleted, and one '
-                                 'of them is probably not downloaded from iCloud.',
-                                 out(done, 'Count'), var('Before'), var('Before'),
-                                 var('After'))))
+    # The before/after readout that used to be here was removed on the phone. Delete
+    # Photos raises its own system confirmation naming the count, so the second
+    # dialog said little the first had not. Before and After are still computed and
+    # still sit in variables, visible in the run log if a run ever needs explaining.
     return acts, ['ActionExtension']
 
 

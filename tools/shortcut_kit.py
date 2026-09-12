@@ -108,6 +108,13 @@ KEY_PROVENANCE = {
     'is.workflow.actions.getlastscreenshot':  (None, 'loctable: Get the latest ${WFGetLatestPhotoCount}'),
     'is.workflow.actions.getitemtype':        ('WFInput', 'loctable: Get type of ${WFInput}'),
     'is.workflow.actions.getlastvideo':       (None, 'sibling of getlastscreenshot, which works'),
+    # Both verified on this Mac on 2026-09-12 (tools/probe_cleanup.py): Get File
+    # resolves a path with no picker and no bookmark, and Delete Files removes the
+    # folder it hands back. Note the pair only runs from the Shortcuts UI — under
+    # `shortcuts run` the delete hangs forever, which is a CLI limitation and not
+    # a fault in the shortcut.
+    'is.workflow.actions.documentpicker.open': (None, 'loctable: The path to retrieve (WFGetFilePath); run 2026-09-12'),
+    'is.workflow.actions.file.delete':        ('WFInput', 'loctable: Delete ${WFInput}; run 2026-09-12'),
 }
 
 

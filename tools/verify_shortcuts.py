@@ -58,6 +58,8 @@ NO_INPUT_OK = {
     'is.workflow.actions.filter.photos', 'is.workflow.actions.number',
     # Sources its own items from the photo library rather than from the flow.
     'is.workflow.actions.getlastscreenshot', 'is.workflow.actions.getlastvideo',
+    # Takes a path, not a file: it is where files come from.
+    'is.workflow.actions.documentpicker.open',
 }
 
 
