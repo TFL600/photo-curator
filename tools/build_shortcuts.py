@@ -41,8 +41,19 @@ from shortcut_kit import (                                            # noqa: E4
 TRIAGE_ALBUM = 'Triage'      # working set, rebuilt from scratch by every export
 TRIAGED_ALBUM = 'Triaged'    # everything already swiped once; never offered again
 EXPORT_ROOT = '/TriageExport'
-WINDOW_DAYS = 3              # how far back an export looks
-WINDOW_LIMIT = 400           # hard cap, so a bad run cannot chew through the library
+# How far back an export looks. This is not "how often you take photos", it is
+# "how long you might leave the backlog" — every run rebuilds the album from
+# scratch, so anything untriaged that has aged out of this window is never offered
+# again. At three days, triaging weekly silently lost four days of every week: the
+# Monday photos were gone by Thursday's run, not deleted, just never shown.
+#
+# Repeats are not what the window prevents; the Triaged album is. So the window
+# only has to outlast the longest gap between triage sessions.
+WINDOW_DAYS = 14
+# Hard cap, so a bad run cannot chew through the library. Find Photos is Oldest
+# First, so when a backlog exceeds this it keeps the oldest — the ones about to
+# age out of the window, which is the right end to save.
+WINDOW_LIMIT = 400
 PHOTO_WIDTH = 800
 VIDEO_SIZE = '960x540'
 # Album name → sidecar kind. The app stages each of these as a grid before swiping.
@@ -54,14 +65,17 @@ CATEGORIES = [('WhatsApp', 'whatsapp')]
 # An int here appeared to be ignored: a run that should have listed hundreds of
 # screenshots wrote a 422-byte sidecar, about eleven names, so screenshots outside
 # that handful were never tagged and went into the swipe stack untouched.
-SCREENSHOT_SCAN = 120.0
+SCREENSHOT_SCAN = 400.0
 # Get Type's exact wording for a video is not known. Test every plausible spelling
 # rather than spend a round trip per guess; diag-types.txt records the real answer.
-# Deliberately small. These scans cost time proportional to the library, not to
-# the batch, and a 500-video scan hung a two-item export for minutes. Only assets
-# inside the export window can matter, so a shallow scan loses nothing: a video
-# older than this is also older than WINDOW_DAYS and is not in the export.
-VIDEO_SCAN = 60.0
+# These scans cost time proportional to the library, not to the batch — a 500-video
+# scan once hung a two-item export for minutes — so they are kept as shallow as the
+# window allows. They have to be sized *with* WINDOW_DAYS, though: the whole
+# justification for a shallow scan is that anything it misses is older than the
+# window and therefore not in the export. Widening the window to 14 days without
+# widening these would have meant companion videos quietly going missing and the
+# screenshot grid quietly under-covering, with nothing to say so.
+VIDEO_SCAN = 200.0
 # Most a single hand-picked name may resolve to. Live Photo pairs and edited
 # copies make a couple plausible; anything more means the filter is not working.
 QUICK_NAME_LIMIT = 3.0

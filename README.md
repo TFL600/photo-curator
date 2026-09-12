@@ -46,7 +46,7 @@ deterministically ordered album.
      "startedAt": "2026-09-06 18:30:00",
      "exportedAt": "2026-09-06 18:31:12",
      "folder": "2026-09-06-1830",
-     "windowDays": 3
+     "windowDays": 14
    }
    ```
 
