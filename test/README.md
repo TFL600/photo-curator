@@ -40,6 +40,7 @@ The Shortcuts have their own checks, which do not need the phone:
 python3 tools/verify_shortcuts.py    # static checks on the generated plists
 python3 tools/build_shortcuts.py     # build, verify, sign into ~/Downloads
 python3 tools/roundtrip_check.py     # after importing: diff stored vs generated
+python3 tools/check_albums.py        # two albums sharing a name, which breaks identity
 ```
 
 `verify_shortcuts.py` catches the failure mode that costs the most time — a parameter
