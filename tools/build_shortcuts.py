@@ -41,19 +41,19 @@ from shortcut_kit import (                                            # noqa: E4
 TRIAGE_ALBUM = 'Triage'      # working set, rebuilt from scratch by every export
 TRIAGED_ALBUM = 'Triaged'    # everything already swiped once; never offered again
 EXPORT_ROOT = '/TriageExport'
-# How far back an export looks. Three, and it cannot simply be raised — see
-# "Save to Photo Album needs the pixels" below. Fourteen was tried on 2026-09-13
-# and failed outright with PHPhotosErrorDomain 3300 on the first asset.
+# How far back each run reaches for *new* photos. This is not how long a backlog
+# may sit — `Triage` accumulates, so the backlog is held by the album, not by this
+# number. It only has to outlast a missed run or two of a daily automation.
 #
-# This is the real limit on leaving the backlog: every run rebuilds the album from
-# scratch, so anything untriaged that ages out of this window is never offered
-# again. Triaging weekly loses four days of every week. Fixing that properly means
-# not rebuilding the album — see the same note.
-WINDOW_DAYS = 3
-# Hard cap, so a bad run cannot chew through the library. Find Photos is Oldest
-# First, so when a backlog exceeds this it keeps the oldest — the ones about to
-# age out of the window, which is the right end to save.
-WINDOW_LIMIT = 400
+# It also cannot be raised much. Save to Photo Album needs the asset's data, and
+# Optimise iPhone Storage offloads older originals; at fourteen days the intake
+# failed outright with PHPhotosErrorDomain 3300 on the first asset. Three days
+# keeps the intake to photos that are still on the device.
+INTAKE_DAYS = 3
+# Hard cap on one run's intake, so a bad run cannot chew through the library.
+# Oldest First, so an intake larger than this keeps the oldest — the ones closest
+# to ageing out of the window, which is the right end to save.
+INTAKE_LIMIT = 400
 PHOTO_WIDTH = 800
 VIDEO_SIZE = '960x540'
 # Album name → sidecar kind. The app stages each of these as a grid before swiping.
@@ -65,17 +65,20 @@ CATEGORIES = [('WhatsApp', 'whatsapp')]
 # An int here appeared to be ignored: a run that should have listed hundreds of
 # screenshots wrote a 422-byte sidecar, about eleven names, so screenshots outside
 # that handful were never tagged and went into the swipe stack untouched.
-SCREENSHOT_SCAN = 120.0
+SCREENSHOT_SCAN = 400.0
 # Get Type's exact wording for a video is not known. Test every plausible spelling
 # rather than spend a round trip per guess; diag-types.txt records the real answer.
-# These scans cost time proportional to the library, not to the batch — a 500-video
-# scan once hung a two-item export for minutes — so they are kept as shallow as the
-# window allows. They have to be sized *with* WINDOW_DAYS, though: the whole
-# justification for a shallow scan is that anything it misses is older than the
-# window and therefore not in the export. Widening the window to 14 days without
-# widening these would have meant companion videos quietly going missing and the
-# screenshot grid quietly under-covering, with nothing to say so.
-VIDEO_SCAN = 60.0
+# These scans cost time proportional to the library rather than to the batch, so
+# they used to be kept as shallow as the intake window allowed. That reasoning died
+# with the rebuild: the batch is the whole of Triage now, which holds everything
+# untriaged however old, so a scan sized to the intake window would miss most of it.
+#
+# Both degrade quietly rather than breaking — a video past the scan gets its poster
+# frame and no companion, a screenshot past it lands in the swipe stack instead of
+# the grid — which is exactly why they are worth sizing generously. The old hang
+# that made these small was a Repeat *over* a scan; the scans are mapped over in one
+# action now, so depth is much cheaper than it was.
+VIDEO_SCAN = 200.0
 # Most a single hand-picked name may resolve to. Live Photo pairs and edited
 # copies make a couple plausible; anything more means the filter is not working.
 QUICK_NAME_LIMIT = 3.0
@@ -169,12 +172,28 @@ def build_export():
                        WFDateActionMode='Current Date'))
     acts.append(set_var('StartedAt', out(started, 'Date')))
 
-    # Rebuild the working album: window, minus anything already triaged.
-    acts += clear_album(TRIAGE_ALBUM)
+    # Take in what is new, and leave everything else where it is.
+    #
+    # This used to empty Triage and refill it from the window, which made the
+    # window the memory: anything untriaged that aged out was never offered again,
+    # so triaging weekly lost four days of every week silently. The window cannot
+    # simply be widened — Save to Photo Album needs the asset's data and Optimise
+    # iPhone Storage has offloaded the older ones — so the album accumulates
+    # instead, and the intake stays inside the few days where photos are certainly
+    # still on the device. Leave it a day or a month; nothing falls out.
+    #
+    # Remove before add, over the same list. Save to Photo Album duplicates an
+    # asset that is already a member, and Remove from Album is happy to be handed
+    # something it does not have, so removing first is what makes a daily
+    # automation safe to re-run. Verified on this Mac on 2026-09-13: running it
+    # twice over the same fifteen assets left fifteen, not thirty.
     recent = uid()
-    acts.append(find_photos(recent, [taken_within_days(WINDOW_DAYS)],
-                            order='Oldest First', limit=WINDOW_LIMIT))
+    acts.append(find_photos(recent, [taken_within_days(INTAKE_DAYS)],
+                            order='Oldest First', limit=INTAKE_LIMIT))
+    acts += remove_each_from_album(out(recent, 'Photos'), TRIAGE_ALBUM)
     acts += add_each_to_album(out(recent, 'Photos'), TRIAGE_ALBUM)
+    # What has already been swiped leaves the album, which is the only thing that
+    # takes anything out of it. Triaged is now the whole memory of "done".
     acts += subtract_album(TRIAGE_ALBUM, TRIAGED_ALBUM)
     acts += _export_body()
     return acts
@@ -368,7 +387,7 @@ def _export_body():
         WFTextActionText=text(
             '{"album":"' + TRIAGE_ALBUM + '","count":{},"first":"{}","last":"{}",'
             '"startedAt":"{}","exportedAt":"{}","folder":"{}","windowDays":'
-            + str(WINDOW_DAYS) + ',"build":"' + BUILD_PLACEHOLDER + '"}',
+            + str(INTAKE_DAYS) + ',"build":"' + BUILD_PLACEHOLDER + '"}',
             var('Total'), var('First'), out(last_n, 'Name'),
             var('StartedAt'), out(ended, 'Date'), var('Stamp'))))
     acts += save_file('manifest.json',
