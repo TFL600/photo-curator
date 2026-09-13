@@ -107,7 +107,11 @@ def _report_build_ids():
         if data is None:
             continue
         blob = str(plistlib.loads(bytes(data)))
-        found = set(re.findall(r'build ([0-9a-f]{8})', blob))
+        # Two spellings. The finish notification used to say "build <id>", and it
+        # was removed on the phone on purpose — so the manifest's "build":"<id>" is
+        # now the only copy of the stamp, and looking for the old wording alone
+        # reported every current build as unstamped.
+        found = set(re.findall(r'build[":\s]+([0-9a-f]{8})', blob))
         print(f'  {zname!r}: build {", ".join(sorted(found)) or "unstamped (older build)"}')
 
 
