@@ -922,6 +922,40 @@ export async function run(filter) {
     eq('back to landing', pc.activeScreen(), 'landing');
   });
 
+  await test('an export of nothing is good news, not a broken folder', async () => {
+    // What the 18:00 automation writes on a day with nothing left to triage. Verified
+    // against the real Shortcuts behaviour by tools/probe_empty_album.py: First Item
+    // and Get Name survive an empty album, so the run completes with count 0.
+    const res = await pc.validateSelection([
+      manifestFile({ album: 'Triage', count: 0, first: '', last: '',
+                     exportedAt: '2026-09-20T18:00:00Z' }),
+    ]);
+    check('not an error', !res.errors, errorText(res));
+    check('recognised as empty', res.emptyExport === true, JSON.stringify(res));
+  });
+
+  await test('an empty export is not a way past the guard', async () => {
+    // The friendly path must depend on the manifest actually saying zero. A folder
+    // whose media failed to sync says count 5 with nothing there, and that is the
+    // dangerous case the guard exists for — it must still be rejected outright.
+    const res = await pc.validateSelection([
+      manifestFile({ album: 'Triage', count: 5, first: 'IMG_1.HEIC', last: 'IMG_5.HEIC',
+                     exportedAt: 'x' }),
+    ]);
+    check('rejected', !!res.errors, 'expected rejection');
+    check('not treated as empty', !res.emptyExport, 'wrongly waved through as empty');
+    check('says the count disagrees', /counts 5/.test(errorText(res)), errorText(res));
+
+    // And a count-0 manifest that arrives with media anyway is a contradiction, not
+    // an empty export.
+    const res2 = await pc.validateSelection([
+      await photoFile('1_IMG_1001.HEIC.jpg'),
+      manifestFile({ album: 'Triage', count: 0, first: '', last: '', exportedAt: 'x' }),
+    ]);
+    check('contradiction rejected', !!res2.errors, 'expected rejection');
+    check('not treated as empty', !res2.emptyExport, 'wrongly waved through as empty');
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,

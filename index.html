@@ -1043,6 +1043,14 @@
     }
     .btn-secondary:active { transform: scale(0.985); }
 
+    .empty-export {
+      background: rgba(127,127,127,0.09); border-radius: 14px;
+      padding: 16px 18px; margin-bottom: 18px; max-width: 30rem; text-align: center;
+    }
+    .empty-export-title { font-weight: 600; margin-bottom: 6px; }
+    .empty-export p { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin: 0; }
+    .empty-export-when { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+
     #screen-manual { padding: 24px 20px 40px; overflow-y: auto; }
     .manual-wrap { max-width: 34rem; margin: 0 auto; }
     .manual-title { font-family: var(--display), serif; font-size: 1.6rem; margin: 8px 0 12px; }
@@ -1214,6 +1222,12 @@
     <div class="landing-last-label">Last sorted</div>
     <div class="landing-last-month" id="landing-last-month"></div>
     <div class="landing-last-thumbs" id="landing-last-thumbs"></div>
+  </div>
+  <div class="empty-export" id="empty-export" style="display:none">
+    <div class="empty-export-title">Nothing to triage 🎉</div>
+    <p>That export came back empty — everything in the window has already been
+      swiped. Nothing to do.</p>
+    <div class="empty-export-when" id="empty-export-when"></div>
   </div>
   <div class="load-error" id="load-error" style="display:none">
     <div class="load-error-title">Can't trust this folder</div>
@@ -1634,6 +1648,20 @@ async function validateSelection(files) {
     }
   }
 
+  // An export of nothing is a real, correct outcome, not a broken folder. The album
+  // accumulates but the intake only reaches back INTAKE_DAYS, so a quiet few days —
+  // or a session that triaged everything — leaves the automation with nothing to
+  // export. Verified on this Mac (tools/probe_empty_album.py): First Item and Get
+  // Name survive an empty album and return empty, so the run completes and writes a
+  // manifest saying count 0.
+  //
+  // Reporting that as "Can't trust this folder" is the single most misleading thing
+  // this app could say about it. The guard has to stay absolute about mismatches, so
+  // this is decided before the mismatch checks rather than softening any of them.
+  if (mf && toCount(mf.count) === 0 && !media.length && !strays.length) {
+    return { emptyExport: true, manifest: mf, diag };
+  }
+
   if (strays.length) errors.push(`Not a photo or video: ${listNames(strays.map(f => f.name))}.`);
   if (!media.length) errors.push('No photos or videos in the selection.');
 
@@ -1783,7 +1811,22 @@ function showLoadError(errors, diag, manualHint) {
   loadError.scrollIntoView({ block: 'nearest' });
 }
 
+// Nothing to triage is good news, and has to read like it.
+function showEmptyExport(mf) {
+  hideLoadError();
+  const when = formatExportedAt(mf?.exportedAt);
+  document.getElementById('empty-export-when').textContent =
+    when ? `Exported ${when}` : '';
+  document.getElementById('empty-export').style.display = '';
+  resetSelectButton();
+}
+
+function hideEmptyExport() {
+  document.getElementById('empty-export').style.display = 'none';
+}
+
 function hideLoadError() {
+  hideEmptyExport();
   loadError.style.display = 'none';
   loadErrorList.innerHTML = '';
   loadErrorDiag.innerHTML = '';
@@ -1878,6 +1921,7 @@ fileInput.addEventListener('change', async () => {
 
   const result = await validateSelection(files);
   resetSelectButton();
+  if (result.emptyExport) { showEmptyExport(result.manifest); return; }
   if (result.errors) { showLoadError(result.errors, result.diag, result.manualHint); return; }
 
   await startSession(result.entries, result.manifest);
@@ -3477,7 +3521,7 @@ if (new URLSearchParams(location.search).has('test')) {
     deleteShortcutName, deleteShortcutInput, isManualBatch,
     logBatch, readLog, indicesFor, parseIndexedName,
     parseExportDate, exportDuration,
-    normaliseAssetName, isVideoFile, commitStage,
+    normaliseAssetName, isVideoFile, commitStage, showEmptyExport,
     BURST, burstAnalyse, hamming, clusterPhotos, rankCluster, finishBurst,
     manifestKeyFor, restoreDecisions, persistDecisions, forgetDecisions,
     setPersistence(on) { persistenceEnabled = !!on; },
