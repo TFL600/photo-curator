@@ -909,6 +909,19 @@ export async function run(filter) {
     eq('round-trips through storage', log[0].input, '1,3|2,4');
   });
 
+  await test('the manual route is reachable and explains itself', async () => {
+    document.getElementById('btn-manual-help').click();
+    eq('shows the manual screen', pc.activeScreen(), 'manual');
+    const body = document.getElementById('screen-manual').textContent;
+    check('names the shortcut to run', /Photo Curator Export Selected/.test(body), body.slice(0, 200));
+    check('says the backlog is untouched', /Triage Manual/.test(body), body.slice(0, 200));
+    // The copy wraps across lines in the markup, so normalise before matching.
+    const flat = body.replace(/\s+/g, ' ');
+    check('explains why not an in-app picker', /filenames are not unique/i.test(flat), flat.slice(0, 300));
+    document.getElementById('btn-manual-back').click();
+    eq('back to landing', pc.activeScreen(), 'landing');
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,
