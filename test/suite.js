@@ -799,6 +799,116 @@ export async function run(filter) {
     eq('4 and 5 are still undecided', pc.photos.slice(3).map(p => p.decision), [null, null]);
   });
 
+  // ── The string that goes to Shortcuts ────────────────────────────────────
+
+  await test('the shortcut input carries the keep list, not just the deletes', async () => {
+    const res = await pc.validateSelection(await goodExport(5));
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('delete');                  // 1
+    pc.decide('keep');                    // 2
+    pc.decide('delete');                  // 3
+    pc.decide('album');                   // 4  — starred is kept, not deleted
+    pc.decide('keep');                    // 5
+    pc.settleNow();
+    eq('deletes on the left', pc.buildInput(), '1,3');
+    eq('keeps and stars on the right', pc.buildKeepInput(), '2,4,5');
+    eq('combined', pc.buildShortcutInput(), '1,3|2,4,5');
+    // What is actually sent, not just what the helper can produce. The keep list is
+    // the whole fix; a backlog batch that ships without it puts the shortcut back to
+    // inferring the keeps from the album, which is the 2026-09-19 failure.
+    eq('and that is what gets sent', pc.deleteShortcutInput(), '1,3|2,4,5');
+    // Every index appears exactly once across the two lists, or the shortcut either
+    // misses a photo or marks one it deleted.
+    const all = pc.buildShortcutInput().split('|').flatMap(x => x ? x.split(',') : []);
+    eq('every position accounted for once', all.map(Number).sort((a, b) => a - b),
+       [1, 2, 3, 4, 5]);
+  });
+
+  await test('an all-keep batch still sends something to mark', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('keep'); pc.decide('keep'); pc.decide('keep');
+    pc.settleNow();
+    // This used to be a second shortcut that only ran when the delete pile was empty,
+    // and so had never run once. Now it is the same call with an empty left side.
+    eq('empty delete side', pc.deleteShortcutInput(), '|1,2,3');
+    eq('same shortcut as always', pc.deleteShortcutName(), 'Photo Curator Delete');
+  });
+
+  await test('an undecided photo is in neither list', async () => {
+    const res = await pc.validateSelection(await goodExport(4));
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('delete');
+    pc.decide('keep');
+    pc.settleNow();
+    eq('only what was decided', pc.deleteShortcutInput(), '1|2');
+    // Marking an undecided photo as triaged would retire it without it ever having
+    // been looked at, which is the silent version of losing it.
+    check('3 and 4 are absent', !/3|4/.test(pc.deleteShortcutInput()), pc.deleteShortcutInput());
+  });
+
+  await test('a hand-picked batch never reaches the backlog shortcut', async () => {
+    const files = await goodExport(3, { album: 'Triage Manual' });
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('delete'); pc.decide('keep'); pc.decide('delete');
+    pc.settleNow();
+    check('recognised as manual', pc.isManualBatch(), 'manifest album was ' + pc.manifest.album);
+    eq('its own shortcut', pc.deleteShortcutName(), 'Photo Curator Delete Manual');
+    // Positions counted in Triage Manual mean nothing in Triage. Sending the pair
+    // format to the backlog shortcut would resolve them against the wrong album, and
+    // would mark hand-picked photos as triaged on top of that.
+    eq('plain index list, no keep side', pc.deleteShortcutInput(), '1,3');
+    check('no separator', !pc.deleteShortcutInput().includes('|'), pc.deleteShortcutInput());
+  });
+
+  await test('a backlog batch is recognised as one', async () => {
+    const res = await pc.validateSelection(await goodExport(2));
+    await pc.startSession(res.entries, res.manifest);
+    check('not manual', !pc.isManualBatch(), 'album was ' + pc.manifest.album);
+    eq('backlog shortcut', pc.deleteShortcutName(), 'Photo Curator Delete');
+  });
+
+  await test('photos picked from the library are rejected with the manual route offered', async () => {
+    // Exactly what iOS hands the page when "Photo Library" is chosen in the picker:
+    // media, no manifest, no index in any name.
+    const res = await pc.validateSelection([
+      await photoFile('IMG_4021.HEIC'),
+      await photoFile('IMG_4022.HEIC'),
+    ]);
+    check('rejected', !!res.errors, 'expected rejection');
+    check('offers the manual route', res.manualHint === true, JSON.stringify(res.errors));
+    check('says why, in one message', res.errors.length === 1, JSON.stringify(res.errors));
+    check('mentions deletion safety', /delete/i.test(res.errors[0]), res.errors[0]);
+  });
+
+  await test('a real export is never mistaken for a library pick', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    check('accepted', !res.errors, errorText(res));
+    const noManifest = (await goodExport(3)).filter(f => f.name !== 'manifest.json');
+    const res2 = await pc.validateSelection(noManifest);
+    check('missing manifest still rejected', !!res2.errors, 'expected rejection');
+    check('but not as a library pick', !res2.manualHint, 'wrongly offered the manual route');
+  });
+
+  await test('every batch sent to Shortcuts is written to the log', async () => {
+    localStorage.removeItem('batchLog');
+    const res = await pc.validateSelection(await goodExport(4));
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('delete'); pc.decide('keep'); pc.decide('delete'); pc.decide('album');
+    pc.settleNow();
+    const entry = pc.logBatch('delete');
+    eq('what was deleted', entry.deleted, [1, 3]);
+    eq('what was kept', entry.kept, [2, 4]);
+    eq('nothing left over', entry.undecided, []);
+    eq('the exact string sent', entry.input, '1,3|2,4');
+    eq('which shortcut', entry.shortcut, 'Photo Curator Delete');
+    eq('which album the positions mean', entry.album, 'Triage');
+    const log = pc.readLog();
+    eq('one entry', log.length, 1);
+    eq('round-trips through storage', log[0].input, '1,3|2,4');
+  });
+
   const failed = results.filter(r => !r.pass);
   return {
     total: results.length,

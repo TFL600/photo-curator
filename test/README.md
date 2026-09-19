@@ -5,6 +5,19 @@ calls the app's real functions, exposed by the `?test=1` hook at the bottom of
 `index.html`.
 
 ```bash
+node test/run.js
+```
+
+That serves the repo, drives headless Chrome over CDP and exits non-zero on a failure,
+with no dependencies — Chrome is already on the machine and Node 22 has a WebSocket
+client built in. `node test/run.js burst` runs only the tests whose name matches, and
+`node test/run.js --head` opens a real window to watch. An uncaught exception on the
+page fails the run even if every check passed, which is how the swipe-window crash would
+have been caught.
+
+To drive it by hand instead:
+
+```bash
 python3 -m http.server 8765
 ```
 
@@ -38,6 +51,7 @@ The Shortcuts have their own checks, which do not need the phone:
 
 ```bash
 python3 tools/verify_shortcuts.py    # static checks on the generated plists
+python3 tools/verify_selftest.py     # proves the verifier still catches each failure mode
 python3 tools/build_shortcuts.py     # build, verify, sign into ~/Downloads
 python3 tools/roundtrip_check.py     # after importing: diff stored vs generated
 python3 tools/check_albums.py        # two albums sharing a name, which breaks identity

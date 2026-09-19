@@ -1043,6 +1043,23 @@
     }
     .btn-secondary:active { transform: scale(0.985); }
 
+    #screen-manual { padding: 24px 20px 40px; overflow-y: auto; }
+    .manual-wrap { max-width: 34rem; margin: 0 auto; }
+    .manual-title { font-family: var(--display), serif; font-size: 1.6rem; margin: 8px 0 12px; }
+    .manual-lead { color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+    .manual-steps { padding-left: 1.2em; margin-bottom: 22px; }
+    .manual-steps li { margin-bottom: 12px; line-height: 1.5; }
+    .manual-why {
+      font-size: 0.86rem; color: var(--muted); line-height: 1.55;
+      background: rgba(127,127,127,0.09); border-radius: 12px;
+      padding: 12px 14px; margin-bottom: 14px;
+    }
+    .manual-why b { color: var(--fg); }
+    #screen-manual code {
+      font-size: 0.85em; background: rgba(127,127,127,0.16);
+      padding: 1px 5px; border-radius: 5px;
+    }
+
     /* ── BURST REVIEW ── */
     /* A vertical feed, because comparing two nearly identical frames is a
        back-and-forth motion and a carousel makes you pay for every reversal.
@@ -1202,13 +1219,46 @@
     <div class="load-error-title">Can't trust this folder</div>
     <ul id="load-error-list"></ul>
     <div id="load-error-diag"></div>
-    <p class="load-error-hint">Indices only mean anything against the exact export they came from, so nothing was loaded. Re-run the export Shortcut and select the whole folder, <code>manifest.json</code> included.</p>
+    <p class="load-error-hint" id="load-error-hint">Indices only mean anything against the exact export they came from, so nothing was loaded. Re-run the export Shortcut and select the whole folder, <code>manifest.json</code> included.</p>
+    <div id="load-error-manual" style="display:none">
+      <p class="load-error-hint">To go through photos you picked yourself, run them
+        through <b>Photo Curator Export Selected</b> first — it takes a few seconds and
+        makes them safe to delete.</p>
+      <button class="btn-secondary" id="btn-manual-from-error">Show me how</button>
+    </div>
   </div>
   <button class="btn-primary" id="btn-select">Open Export Folder</button>
+  <button class="btn-secondary" id="btn-manual-help">Manual selection this time</button>
+  <button class="btn-secondary" id="btn-undo-batch">Undo last batch's triage marks</button>
   <!-- No accept filter: iOS maps accept="application/json"/.json to a UTType
        inconsistently and greys out manifest.json in the Files picker, which makes the
        export folder impossible to select. Type checking happens in the guard. -->
   <input type="file" id="file-input" multiple>
+</div>
+
+<!-- MANUAL: how the hand-picked route works, and why it is not a file picker -->
+<div id="screen-manual" class="screen">
+  <div class="manual-wrap">
+    <h2 class="manual-title">Manual selection</h2>
+    <p class="manual-lead">Pick the photos in Photos, not here. Three taps, and everything
+      after that works exactly as it does for a daily export.</p>
+    <ol class="manual-steps">
+      <li><b>Photos app</b> — select the photos you want to go through.</li>
+      <li><b>Share</b> → <b>Photo Curator Export Selected</b>. It takes a few seconds and
+        writes one folder.</li>
+      <li>Come back here, tap <b>Open Export Folder</b>, and pick everything inside
+        <code>TriageExport/</code> — <code>manifest.json</code> included.</li>
+    </ol>
+    <p class="manual-why"><b>Why not just pick photos here?</b> Because the app would have
+      no safe way to delete them afterwards. iOS hands a web page filenames, and filenames
+      are not unique — Live Photo pairs, edited copies and re-imports share them, and a
+      229-name list once resolved to 257 assets. Deleting on a filename match deletes the
+      wrong photo, silently. Going through an album means each photo is identified by its
+      position in that album, which is exactly how the daily export already works.</p>
+    <p class="manual-why">Your backlog is not touched: the hand-picked route has its own
+      album, <code>Triage Manual</code>, and nothing you swipe there is marked as triaged.</p>
+    <button class="btn-primary" id="btn-manual-back">Got it</button>
+  </div>
 </div>
 
 <!-- STAGE: grid pre-pass for one category -->
@@ -1393,6 +1443,7 @@ let sessionMuted = false;
 // ── Elements ───────────────────────────────────────────
 const screens = {
   landing: document.getElementById('screen-landing'),
+  manual:  document.getElementById('screen-manual'),
   stage:   document.getElementById('screen-stage'),
   burst:   document.getElementById('screen-burst'),
   swiper:  document.getElementById('screen-swiper'),
@@ -1650,6 +1701,20 @@ async function validateSelection(files) {
     diag.push(`${file.name}: ${names.size} name(s) → ${hits} item(s) tagged "${kind}"`);
   }
 
+  // Picking photos from the library instead of the export folder is not a corrupt
+  // export, it is a different intention — and the generic "can't trust this folder"
+  // wall says nothing about what to do instead. The signature is unmistakable: media
+  // only, no manifest, and not one filename carrying an index.
+  if (!manifestFile && media.length && unindexed.length === media.length) {
+    return {
+      errors: ['These look like photos picked straight from the library, not an ' +
+               'export folder — so there is no way to tell which asset each one is, ' +
+               'and nothing can be safely deleted from them.'],
+      diag,
+      manualHint: true,
+    };
+  }
+
   if (entries.length) {
     const f = entries[0], l = entries[entries.length - 1];
     diag.push(`first file: "${f.file.name}" → index ${f.idx}${f.name ? `, name "${f.name}"` : ''}`);
@@ -1658,6 +1723,11 @@ async function validateSelection(files) {
   media.forEach(f => { if (f.size === 0) diag.push(`0 bytes (still syncing?): ${f.name}`); });
 
   return errors.length ? { errors, diag } : { entries, manifest: mf };
+}
+
+function showManual() {
+  hideLoadError();
+  showScreen('manual');
 }
 
 // ── Video thumbnail ─────────────────────────────────────
@@ -1689,8 +1759,10 @@ const loadError     = document.getElementById('load-error');
 const loadErrorList = document.getElementById('load-error-list');
 const loadErrorDiag = document.getElementById('load-error-diag');
 
-function showLoadError(errors, diag) {
+function showLoadError(errors, diag, manualHint) {
   loadErrorList.innerHTML = '';
+  document.getElementById('load-error-manual').style.display = manualHint ? '' : 'none';
+  document.getElementById('load-error-hint').style.display = manualHint ? 'none' : '';
   errors.forEach(msg => {
     const li = document.createElement('li');
     li.textContent = msg;
@@ -1806,7 +1878,7 @@ fileInput.addEventListener('change', async () => {
 
   const result = await validateSelection(files);
   resetSelectButton();
-  if (result.errors) { showLoadError(result.errors, result.diag); return; }
+  if (result.errors) { showLoadError(result.errors, result.diag, result.manualHint); return; }
 
   await startSession(result.entries, result.manifest);
 });
@@ -3232,8 +3304,74 @@ function buildInput() {
   return indicesFor('delete').join(',');
 }
 
+// Everything that survives the session, starred included. A photo is "kept" here if
+// the user decided anything about it that was not "delete".
+function buildKeepInput() {
+  return [...new Set([...indicesFor('keep'), ...indicesFor('album')])]
+    .sort((a, b) => a - b).join(',');
+}
+
+// What actually goes to Shortcuts: "<deletes>|<keeps>".
+//
+// The keep list is the whole point. The delete shortcut used to work out what had
+// been kept by asking Photos what was still in the album afterwards, which gives the
+// right answer when the deletion worked and the catastrophically wrong one when it
+// silently did not — every photo still present, so every photo marked as triaged and
+// never offered again. That is what happened on 2026-09-19. The app is the only thing
+// that knows what was kept, so the app says so.
+function buildShortcutInput() {
+  return buildInput() + '|' + buildKeepInput();
+}
+
+// A hand-picked batch is counted in its own album, so its indices mean nothing to the
+// shortcut that resolves them against the backlog. The manifest says which album the
+// positions were counted in; that decides which shortcut may receive them.
+function isManualBatch() {
+  return manifest?.album === 'Triage Manual';
+}
+
+function deleteShortcutName() {
+  return isManualBatch() ? 'Photo Curator Delete Manual' : 'Photo Curator Delete';
+}
+
+function deleteShortcutInput() {
+  return isManualBatch() ? buildInput() : buildShortcutInput();
+}
+
 function buildAlbumInput() {
   return indicesFor('album').join(',');
+}
+
+// ── The batch log ───────────────────────────────────────
+// Every string this app has ever sent to Shortcuts, with what it meant, kept in
+// localStorage. There was no record of any of this: when a session went wrong the
+// only evidence was the photos themselves, and "which ones did it mark?" had no
+// answer anywhere. Small, bounded, and readable from the confirm screen.
+const LOG_KEY = 'batchLog';
+const LOG_MAX = 40;
+
+function readLog() {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch (_) { return []; }
+}
+
+function logBatch(kind) {
+  const entry = {
+    at: new Date().toISOString(),
+    album: manifest?.album || null,
+    exportedAt: manifest?.exportedAt || null,
+    build: manifest?.build || null,
+    count: photos.length,
+    shortcut: deleteShortcutName(),
+    input: deleteShortcutInput(),
+    deleted: indicesFor('delete'),
+    kept: [...new Set([...indicesFor('keep'), ...indicesFor('album')])].sort((a, b) => a - b),
+    undecided: photos.filter(p => p.decision === null).map(p => p.idx),
+    kind,
+  };
+  try {
+    localStorage.setItem(LOG_KEY, JSON.stringify([entry, ...readLog()].slice(0, LOG_MAX)));
+  } catch (_) {}
+  return entry;
 }
 
 document.getElementById('btn-album-shortcut').addEventListener('click', () => {
@@ -3258,14 +3396,13 @@ btnCopyAlbum.addEventListener('click', () => {
 });
 
 btnDelete.addEventListener('click', () => {
-  const input = buildInput();
-  if (!input) {
-    // Nothing to delete, but the batch still has to be recorded as triaged.
-    window.location.href = 'shortcuts://run-shortcut?name=Mark%20Batch%20Triaged';
-    return;
-  }
-  window.location.href = 'shortcuts://run-shortcut?name=Delete%20Photos%20By%20Index&input='
-    + encodeURIComponent(input);
+  // An empty delete pile is no longer a special case with its own shortcut: it is
+  // just "|1,2,3", nothing on the left. The old second shortcut only ran sometimes,
+  // and so had never run at all.
+  const input = deleteShortcutInput();
+  logBatch(buildInput() ? 'delete' : 'mark-only');
+  window.location.href = 'shortcuts://run-shortcut?name='
+    + encodeURIComponent(deleteShortcutName()) + '&input=' + encodeURIComponent(input);
 });
 
 const btnCopy = document.getElementById('btn-copy');
@@ -3280,6 +3417,21 @@ btnCopy.addEventListener('click', () => {
   }).catch(() => {
     btnCopy.textContent = 'See string below';
   });
+});
+
+// ── Manual route + batch undo ───────────────────────────
+document.getElementById('btn-manual-help').addEventListener('click', showManual);
+document.getElementById('btn-manual-from-error').addEventListener('click', showManual);
+document.getElementById('btn-manual-back').addEventListener('click', () => {
+  showScreen('landing');
+});
+
+// The one thing Triaged had no undo for. Deleting is covered by Recently Deleted for
+// 30 days; being marked as triaged is forever and invisible, which is the failure
+// that actually cost a backlog.
+document.getElementById('btn-undo-batch').addEventListener('click', () => {
+  window.location.href = 'shortcuts://run-shortcut?name=' +
+    encodeURIComponent('Photo Curator Undo Last Batch');
 });
 
 // ── Restart swiping (same photos, reset decisions) ──────
@@ -3321,7 +3473,9 @@ if ('serviceWorker' in navigator) {
 if (new URLSearchParams(location.search).has('test')) {
   window.__pc = {
     validateSelection, startSession, enterSwiper, decide, undo, showConfirm,
-    buildInput, buildAlbumInput, indicesFor, parseIndexedName,
+    buildInput, buildAlbumInput, buildKeepInput, buildShortcutInput,
+    deleteShortcutName, deleteShortcutInput, isManualBatch,
+    logBatch, readLog, indicesFor, parseIndexedName,
     parseExportDate, exportDuration,
     normaliseAssetName, isVideoFile, commitStage,
     BURST, burstAnalyse, hamming, clusterPhotos, rankCluster, finishBurst,

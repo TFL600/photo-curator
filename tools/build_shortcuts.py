@@ -38,8 +38,18 @@ from shortcut_kit import (                                            # noqa: E4
 )
 
 # ── Configuration ───────────────────────────────────────────
-TRIAGE_ALBUM = 'Triage'      # working set, rebuilt from scratch by every export
+TRIAGE_ALBUM = 'Triage'      # the backlog; accumulates, and only triage takes a photo out
 TRIAGED_ALBUM = 'Triaged'    # everything already swiped once; never offered again
+# The keepers of the most recent finished batch, and nothing else. It exists so the
+# marking done by the last run can be taken back: `Photo Curator Undo Last Batch`
+# removes exactly these from Triaged, which puts them back in tomorrow's export. A
+# swipe session that went wrong is otherwise unrecoverable by hand — the whole point
+# of Triaged is that it is invisible once written.
+LAST_BATCH_ALBUM = 'Triaged Last Batch'
+# The hand-picked route's working set. Deliberately NOT Triage: that album is the
+# backlog now, and the manual export clears its album on every run, so pointing the
+# two at one album would delete the backlog on every manual pick.
+MANUAL_ALBUM = 'Triage Manual'
 EXPORT_ROOT = '/TriageExport'
 # How far back each run reaches for *new* photos. This is not how long a backlog
 # may sit — `Triage` accumulates, so the backlog is held by the album, not by this
@@ -120,9 +130,15 @@ def stamp_build_id(actions):
 
 
 # ── Reusable fragments ──────────────────────────────────────
-def find_triage(u):
-    """The ordering that defines identity. Used verbatim by every shortcut."""
-    return find_photos(u, [album_is(TRIAGE_ALBUM)], sort='Date Taken',
+def find_triage(u, album_name=TRIAGE_ALBUM):
+    """The ordering that defines identity. Used verbatim by every shortcut.
+
+    The album is a parameter only so the hand-picked route can have a working set of
+    its own. Within one album the lookup is byte-for-byte the same everywhere, which
+    is what verify_shortcuts.py enforces — per album, since two albums are two
+    independent index spaces and an index from one means nothing in the other.
+    """
+    return find_photos(u, [album_is(album_name)], sort='Date Taken',
                        order='Oldest First', limit=None)
 
 
@@ -214,14 +230,20 @@ def build_export_selected():
     position in the album is identity, the app reads indices, and Delete Photos By
     Index needs no modification. It is also fewer taps than picking in the app.
     """
-    acts = list(clear_album(TRIAGE_ALBUM))
-    acts += add_each_to_album(shortcut_input(), TRIAGE_ALBUM)
-    acts += _export_body()
+    acts = list(clear_album(MANUAL_ALBUM))
+    acts += add_each_to_album(shortcut_input(), MANUAL_ALBUM)
+    acts += _export_body(MANUAL_ALBUM)
     return acts, ['ActionExtension']
 
 
-def _export_body():
-    """Everything after the Triage album has been filled: files and manifest."""
+def _export_body(album_name=TRIAGE_ALBUM):
+    """Everything after the working album has been filled: files and manifest.
+
+    `album_name` goes into the manifest as well as into every lookup, so the app can
+    tell a hand-picked batch from a backlog one and send its indices to the shortcut
+    that resolves them against the same album. An index is only meaningful together
+    with the album it was counted in.
+    """
     acts = []
 
     # Clear out every previous export first.
@@ -249,7 +271,7 @@ def _export_body():
                WFInput=var('Repeat Item'), WFDeleteImmediatelyDelete=True)])
 
     setu = uid()
-    acts.append(find_triage(setu))
+    acts.append(find_triage(setu, album_name))
     acts.append(set_var('Assets', out(setu, 'Photos')))
     countu = uid()
     acts.append(action('is.workflow.actions.count', UUID=countu,
@@ -266,9 +288,12 @@ def _export_body():
     # Category sidecars. Names only — they steer the staging grid in the app and
     # nothing else, so a filename collision costs a mis-staged thumbnail. Names
     # that match nothing in the export are ignored, so a sidecar may over-list.
-    for album_name, kind in CATEGORIES:
+    # `group_album` is not `album_name`: this loop used to bind the same name as the
+    # enclosing parameter, which would have left every lookup and the manifest below
+    # pointing at whichever category happened to be last.
+    for group_album, kind in CATEGORIES:
         found = uid()
-        acts.append(find_photos(found, [album_is(TRIAGE_ALBUM), album_is(album_name)]))
+        acts.append(find_photos(found, [album_is(album_name), album_is(group_album)]))
         acts += _sidecar(kind, out(found, 'Photos'))
 
     # How a video is told apart from a photo. Get Type reports the same string for
@@ -340,7 +365,7 @@ def _export_body():
         WFContentItemLimitEnabled=False,
         WFContentItemFilter={
             'Value': {'WFActionParameterFilterPrefix': 1,
-                      'WFActionParameterFilterTemplates': [album_is(TRIAGE_ALBUM)],
+                      'WFActionParameterFilterTemplates': [album_is(album_name)],
                       'WFContentPredicateBoundedDate': False},
             'WFSerializationType': 'WFContentPredicateTableTemplate'}))
     vname, venc = uid(), uid()
@@ -385,7 +410,7 @@ def _export_body():
     acts.append(action(
         'is.workflow.actions.gettext', UUID=manifest,
         WFTextActionText=text(
-            '{"album":"' + TRIAGE_ALBUM + '","count":{},"first":"{}","last":"{}",'
+            '{"album":"' + album_name + '","count":{},"first":"{}","last":"{}",'
             '"startedAt":"{}","exportedAt":"{}","folder":"{}","windowDays":'
             + str(INTAKE_DAYS) + ',"build":"' + BUILD_PLACEHOLDER + '"}',
             var('Total'), var('First'), out(last_n, 'Name'),
@@ -491,21 +516,101 @@ def _photo_branch(item, name):
 
 # ── 2. Delete Photos By Index ───────────────────────────────
 def build_delete():
-    """One confirmation for the whole batch, and the counts to prove it worked.
+    """Delete the marked photos, and mark as triaged only the ones actually kept.
 
-    Deleting inside the loop costs one system confirmation per photo, which is
-    unusable at 70 photos. Deleting an accumulated set is a single atomic
-    PHAssetChangeRequest, so one unmaterialisable asset silently fails all of
-    them: the dialog appears, the count is reported, nothing is deleted.
+    This is the shortcut that lost a swipe session on 2026-09-19. It used to delete
+    the targets and then, unconditionally, add *whatever was still in Triage* to
+    Triaged. Those two steps disagree in the one case that matters: Delete Photos on
+    an accumulated set is a single atomic PHAssetChangeRequest, so one unmaterialisable
+    asset fails all of them silently. Nothing is deleted, everything is therefore
+    still in Triage, and everything is therefore marked as triaged — the entire batch
+    suppressed from every future export, with the photos still on the phone. Exactly
+    what was reported: "it didn't delete any, but it did move everything to Triage".
 
-    This used to try the batch and fall back to per-asset deletes if the album
-    count had not moved. That fallback was behind an If, and an If never fires
-    here — the legacy condition keys are stored on import and ignored at runtime —
-    so the safety net was dead code that read like protection. It is gone.
+    The fix is to stop deriving the keep list from the album. The app already knows
+    which photos were kept, so it says so: the input is
 
-    Instead the result names the album count before and after. A batch that
-    silently deleted nothing shows as two equal numbers, which is visible rather
-    than reassuring, and re-running is safe.
+        <delete indices>|<keep indices>
+
+    both ascending, comma-separated, resolved against the same Find Photos lookup.
+    Now a silently failed deletion marks nothing, and the batch comes back on
+    tomorrow's export to be swiped again. The failure went from permanent and
+    invisible to a repeated morning.
+
+    That also makes accumulating safe enough to keep. One confirmation for seventy
+    photos is worth having, and the price of the atomic batch is no longer a lost
+    session.
+
+    Both index lists are resolved to assets BEFORE anything is deleted. Positions are
+    positions in the album, and deleting shifts everything after the first target.
+    """
+    acts = []
+
+    parts = uid()
+    acts.append(action('is.workflow.actions.text.split', UUID=parts,
+                       text=shortcut_input(), WFTextSeparator='Custom',
+                       WFTextCustomSeparator='|'))
+    acts.append(set_var('Parts', out(parts, 'Split Text')))
+
+    dpart, kpart = uid(), uid()
+    acts.append(action('is.workflow.actions.getitemfromlist', UUID=dpart,
+                       WFInput=var('Parts'), WFItemSpecifier='Item At Index',
+                       WFItemIndex=1))
+    acts.append(action('is.workflow.actions.getitemfromlist', UUID=kpart,
+                       WFInput=var('Parts'), WFItemSpecifier='Item At Index',
+                       WFItemIndex=2))
+
+    dsplit, ksplit = uid(), uid()
+    acts.append(action('is.workflow.actions.text.split', UUID=dsplit,
+                       text=out(dpart, 'Item from List'), WFTextSeparator='Custom',
+                       WFTextCustomSeparator=','))
+    acts.append(set_var('DeleteIndices', out(dsplit, 'Split Text')))
+    acts.append(action('is.workflow.actions.text.split', UUID=ksplit,
+                       text=out(kpart, 'Item from List'), WFTextSeparator='Custom',
+                       WFTextCustomSeparator=','))
+    acts.append(set_var('KeepIndices', out(ksplit, 'Split Text')))
+
+    assets = uid()
+    acts.append(find_triage(assets))
+    acts.append(set_var('Assets', out(assets, 'Photos')))
+
+    # Resolve both lists first. After the delete, every position past the first
+    # target means a different asset.
+    dpick = uid()
+    acts += repeat_each(var('DeleteIndices'), [
+        action('is.workflow.actions.getitemfromlist', UUID=dpick, WFInput=var('Assets'),
+               WFItemSpecifier='Item At Index', WFItemIndex=var('Repeat Item')),
+        append_var('Targets', out(dpick, 'Item from List')),
+    ])
+    kpick = uid()
+    acts += repeat_each(var('KeepIndices'), [
+        action('is.workflow.actions.getitemfromlist', UUID=kpick, WFInput=var('Assets'),
+               WFItemSpecifier='Item At Index', WFItemIndex=var('Repeat Item')),
+        append_var('Keepers', out(kpick, 'Item from List')),
+    ])
+
+    acts.append(action('is.workflow.actions.deletephotos', UUID=uid(),
+                       photos=var('Targets')))
+
+    # Record this batch's keepers on their own, so the marking can be undone. Cleared
+    # first, because this album is "the last batch" and not "every batch".
+    acts += clear_album(LAST_BATCH_ALBUM)
+    acts += add_each_to_album(var('Keepers'), LAST_BATCH_ALBUM)
+
+    # Remove then add over the same list, which is what makes a re-run safe: Save to
+    # Photo Album duplicates a member it already has, and Remove from Album is content
+    # to be handed something it does not have. The same trick the intake uses.
+    acts += remove_each_from_album(var('Keepers'), TRIAGED_ALBUM)
+    acts += add_each_to_album(var('Keepers'), TRIAGED_ALBUM)
+    return acts, ['ActionExtension']
+
+
+def build_delete_manual():
+    """The same delete, against the hand-picked album, and nothing else.
+
+    No Triaged marking: a hand-picked batch is not a backlog batch and must not
+    suppress anything from tomorrow's export. The album is cleared afterwards so the
+    next manual pick starts from nothing — which is also why it cannot be Triage.
     """
     acts = []
     split = uid()
@@ -515,12 +620,8 @@ def build_delete():
     acts.append(set_var('Indices', out(split, 'Split Text')))
 
     assets = uid()
-    acts.append(find_triage(assets))
+    acts.append(find_triage(assets, MANUAL_ALBUM))
     acts.append(set_var('Assets', out(assets, 'Photos')))
-    before = uid()
-    acts.append(action('is.workflow.actions.count', UUID=before,
-                       Input=var('Assets'), WFCountType='Items'))
-    acts.append(set_var('Before', out(before, 'Count')))
 
     picked = uid()
     acts += repeat_each(var('Indices'), [
@@ -528,26 +629,36 @@ def build_delete():
                WFItemSpecifier='Item At Index', WFItemIndex=var('Repeat Item')),
         append_var('Targets', out(picked, 'Item from List')),
     ])
-    acts.append(action('is.workflow.actions.deletephotos', UUID=uid(), photos=var('Targets')))
+    acts.append(action('is.workflow.actions.deletephotos', UUID=uid(),
+                       photos=var('Targets')))
+    acts += clear_album(MANUAL_ALBUM)
+    return acts, ['ActionExtension']
 
-    after_find, after_count = uid(), uid()
-    acts.append(find_triage(after_find))
-    acts.append(action('is.workflow.actions.count', UUID=after_count,
-                       Input=out(after_find, 'Photos'), WFCountType='Items'))
 
-    acts.append(set_var('After', out(after_count, 'Count')))
+def build_undo_batch():
+    """Take back the last batch's triage marking, so it is offered again tomorrow.
 
-    # Mark the survivors, so tomorrow's export does not offer them again. Subtract
-    # first, so running this twice on the same export cannot re-add a member.
-    acts += subtract_album(TRIAGE_ALBUM, TRIAGED_ALBUM)
-    survivors = uid()
-    acts.append(find_triage(survivors))
-    acts += add_each_to_album(out(survivors, 'Photos'), TRIAGED_ALBUM)
+    Deleting is not undone and is not meant to be — Recently Deleted already covers
+    that for 30 days. What has no undo at all is the marking: once a photo is in
+    Triaged it is subtracted from every future export, silently and forever, and
+    there is no screen anywhere that lists what is in there or why.
 
-    # The before/after readout that used to be here was removed on the phone. Delete
-    # Photos raises its own system confirmation naming the count, so the second
-    # dialog said little the first had not. Before and After are still computed and
-    # still sit in variables, visible in the run log if a run ever needs explaining.
+    So the marking is recorded as it is made. Photo Curator Delete writes the batch's
+    keepers into `Triaged Last Batch`; this removes exactly those from `Triaged` and
+    then empties the record, so running it twice does nothing the second time.
+    """
+    acts = []
+    batch = uid()
+    acts.append(find_triage(batch, LAST_BATCH_ALBUM))
+    acts.append(set_var('Batch', out(batch, 'Photos')))
+    counted = uid()
+    acts.append(action('is.workflow.actions.count', UUID=counted,
+                       Input=var('Batch'), WFCountType='Items'))
+    acts += remove_each_from_album(var('Batch'), TRIAGED_ALBUM)
+    acts += clear_album(LAST_BATCH_ALBUM)
+    acts.append(action('is.workflow.actions.showresult',
+                       Text=text('{} photo(s) un-triaged. Tomorrow\'s export will '
+                                 'offer them again.', out(counted, 'Count'))))
     return acts, ['ActionExtension']
 
 
@@ -662,10 +773,26 @@ def build_mark_triaged():
 # ── Driver ──────────────────────────────────────────────────
 SHORTCUTS = {
     'Photo Curator Export': lambda: (build_export(), None),
-    'Delete Photos By Index': build_delete,
+    'Photo Curator Export Selected': build_export_selected,
+    'Photo Curator Delete': build_delete,
+    'Photo Curator Delete Manual': build_delete_manual,
+    'Photo Curator Undo Last Batch': build_undo_batch,
     'Add Photos To Album By Index': build_add_to_album,
-    'Mark Batch Triaged': build_mark_triaged,
 }
+# `Delete Photos By Index` is deliberately NOT built any more, and the new one is
+# deliberately not called that. Its input format changed from "3,7,12" to
+# "3,7,12|1,2,4", and the old shortcut would happily split the new string on commas
+# and read "12|1" as a position — which resolves to something, and deletes it. A name
+# that no longer exists fails loudly in Shortcuts; a format change under the same name
+# fails by deleting a photo nobody marked. Delete the old one from the phone.
+#
+# `Mark Batch Triaged` is gone too, folded into Photo Curator Delete: a batch with an
+# empty delete pile is now just "3,7,12|1,2,4" with nothing on the left, and one
+# shortcut that always runs beats a second one that only runs sometimes and had
+# therefore never run at all.
+#
+# `Quick Delete By Name` is still not built, and must stay that way — see its
+# docstring, and the name-matching section in CLAUDE.md.
 # Two routes were tried for hand-picked photos and neither is built any more.
 # Quick Delete By Name matched filenames, which cannot be made safe. Curate
 # Selected replaced it via the share sheet and worked on paper, but the export

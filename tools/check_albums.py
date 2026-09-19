@@ -24,7 +24,10 @@ import sys
 import tempfile
 
 LIBRARY = os.path.expanduser('~/Pictures/Photos Library.photoslibrary/database/Photos.sqlite')
-REQUIRED = ['Triage', 'Triaged']
+# Find Photos aborts the entire run with "Photo album not found" when one of these is
+# missing, and Shortcuts has no error handling to recover from it. All four are real
+# albums; none can be a smart album.
+REQUIRED = ['Triage', 'Triaged', 'Triage Manual', 'Triaged Last Batch']
 # Only the sidecar categories. A missing one is not fatal — the export just tags
 # nothing — but a duplicated one mis-stages thumbnails, so it is worth naming.
 OPTIONAL = ['WhatsApp']

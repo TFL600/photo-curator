@@ -185,8 +185,14 @@ def check(actions, name):
     return problems
 
 
+# Albums whose membership order defines an index space. An index emitted against one
+# of these is meaningless against any other, so each is checked on its own.
+INDEX_ALBUMS = ('Triage', 'Triage Manual')
+TRIAGED_ALBUM = 'Triaged'
+
+
 def _find_photos_signature(actions):
-    """Every Find Photos over the Triage album, reduced to what defines ordering."""
+    """Every Find Photos over an index album, reduced to what defines ordering."""
     sigs = []
     for a in actions:
         if a['WFWorkflowActionIdentifier'] != 'is.workflow.actions.filter.photos':
@@ -196,7 +202,7 @@ def _find_photos_signature(actions):
         templates = f.get('WFActionParameterFilterTemplates', [])
         albums = [t['Values']['Enumeration']['Value'] for t in templates
                   if t.get('Property') == 'Album']
-        if albums != ['Triage']:
+        if len(albums) != 1 or albums[0] not in INDEX_ALBUMS:
             continue
         sigs.append((tuple(albums), p.get('WFContentItemSortProperty'),
                      p.get('WFContentItemSortOrder'), p.get('WFContentItemLimitEnabled'),
@@ -204,26 +210,100 @@ def _find_photos_signature(actions):
     return sigs
 
 
+def _triaged_marking(actions, name):
+    """Refuse to mark Triaged from an album-wide scan in a shortcut that deletes.
+
+    This is the shape of the bug that lost a swipe session on 2026-09-19. The delete
+    shortcut deleted its targets and then added *everything Find Photos still saw in
+    Triage* to Triaged. The two steps agree only when the delete worked, and Delete
+    Photos on an accumulated set is atomic: one unmaterialisable asset fails the whole
+    batch silently. Nothing deleted, so nothing left the album, so the entire batch
+    was marked as triaged and never offered again — with every photo still there.
+
+    "Everything still in the album" is never a safe answer to "what did the user
+    keep", because it is also the answer when nothing happened at all. The keep list
+    has to come from the app, which is the only thing that knows. So: inside a
+    shortcut containing Delete Photos, a Save to Photo Album into Triaged may iterate
+    a variable the shortcut built, but never the output of a Find Photos.
+    """
+    problems = []
+    if not any(a['WFWorkflowActionIdentifier'] == 'is.workflow.actions.deletephotos'
+               for a in actions):
+        return problems
+    finds = {a['WFWorkflowActionParameters'].get('UUID')
+             for a in actions
+             if a['WFWorkflowActionIdentifier'] == 'is.workflow.actions.filter.photos'}
+    scan = None
+    for a in actions:
+        ident = a['WFWorkflowActionIdentifier']
+        p = a['WFWorkflowActionParameters']
+        if ident == 'is.workflow.actions.repeat.each':
+            if p.get('WFControlFlowMode') == 0:
+                ref = p.get('WFInput', {})
+                ref = ref.get('Value', {}).get('OutputUUID') if isinstance(ref, dict) else None
+                scan = ref if ref in finds else None
+            else:
+                scan = None
+        elif (ident == 'is.workflow.actions.savetocameraroll'
+              and p.get('WFCameraRollSelectedGroup') == TRIAGED_ALBUM and scan):
+            problems.append(
+                f'{name}: marks {TRIAGED_ALBUM} from a Find Photos result inside a '
+                f'shortcut that deletes. If the delete silently fails, that marks the '
+                f'whole batch as triaged and it is never offered again. Iterate the '
+                f'keep list the app sent instead.')
+    return problems
+
+
+def _resolve_before_delete(actions, name):
+    """Positions must be turned into assets before anything is deleted.
+
+    Deleting shifts every position after the first target by one, so an index
+    resolved afterwards names a different photo — and names it without any error, the
+    same class of silent wrongness as a divergent lookup. The keep list in particular
+    is resolved after the targets and is easy to drift below the delete during an
+    edit, which is why it is checked rather than just commented.
+    """
+    idents = [a['WFWorkflowActionIdentifier'] for a in actions]
+    if 'is.workflow.actions.deletephotos' not in idents:
+        return []
+    cut = idents.index('is.workflow.actions.deletephotos')
+    for i, a in enumerate(actions[cut + 1:], start=cut + 1):
+        if (a['WFWorkflowActionIdentifier'] == 'is.workflow.actions.getitemfromlist'
+                and a['WFWorkflowActionParameters'].get('WFItemSpecifier') == 'Item At Index'):
+            return [f'{name}: action {i} resolves a position after Delete Photos has '
+                    f'run. Deleting shifts every later position, so this names a '
+                    f'different asset than the app counted — resolve every index '
+                    f'before deleting anything.']
+    return []
+
+
 def verify_all(built):
     problems = []
     for name, actions in built.items():
         problems += check(actions, name)
+        problems += _triaged_marking(actions, name)
+        problems += _resolve_before_delete(actions, name)
 
     # The identity contract: whatever resolves positions must resolve them the same
     # way everywhere. A divergence here is undetectable at runtime and deletes the
     # wrong photos, so it is checked separately and loudly.
-    sigs = {}
+    # Per album: two albums are two index spaces, and it is only a divergence *within*
+    # one album that makes an index resolve to a different asset in two shortcuts.
+    by_album = {}
     for name, actions in built.items():
         for s in _find_photos_signature(actions):
-            sigs.setdefault(s, []).append(name)
-    if len(sigs) > 1:
-        problems.append('Triage lookups disagree on ordering, so indices would '
-                        'resolve differently: ' +
-                        '; '.join(f'{s} used by {sorted(set(n))}' for s, n in sigs.items()))
-    elif len(sigs) == 1:
+            by_album.setdefault(s[0][0], {}).setdefault(s, []).append(name)
+    for album, sigs in sorted(by_album.items()):
+        if len(sigs) > 1:
+            problems.append(f'{album} lookups disagree on ordering, so indices would '
+                            'resolve differently: ' +
+                            '; '.join(f'{s} used by {sorted(set(n))}'
+                                      for s, n in sigs.items()))
+            continue
         (s,) = sigs
         if s[1:] != ('Date Taken', 'Oldest First', False, None):
-            problems.append(f'Triage lookup is not Date Taken / Oldest First / no limit: {s}')
+            problems.append(
+                f'{album} lookup is not Date Taken / Oldest First / no limit: {s}')
 
     return problems
 
