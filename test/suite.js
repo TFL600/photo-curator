@@ -16,7 +16,12 @@ function eq(label, actual, expected) {
   check(label, a === e, `expected ${e}, got ${a}`);
 }
 
+// A filter lets the headless runner re-run one area while a fix is being iterated
+// on, without waiting for the burst clustering tests to decode their fixtures.
+let nameFilter = null;
+
 async function test(name, fn) {
+  if (nameFilter && !nameFilter.test(name)) return;
   currentName = name;
   try {
     await fn();
@@ -142,10 +147,11 @@ function errorText(res) {
 }
 
 // ── Tests ────────────────────────────────────────────────
-export async function run() {
+export async function run(filter) {
   const pc = window.__pc;
   if (!pc) throw new Error('window.__pc missing — load the page with ?test=1');
   results.length = 0;
+  nameFilter = filter ? new RegExp(filter, 'i') : null;
 
   // Every test here uses the same manifest fields, so they would all share one
   // persistence key and inherit each other's decisions. Off by default; the one
@@ -711,6 +717,86 @@ export async function run() {
     eq('one bit low word', pc.hamming(a, b), 1);
     eq('two bits high word', pc.hamming(a, c), 2);
     eq('symmetric', pc.hamming(b, c), pc.hamming(c, b));
+  });
+
+  // ── Regressions from the session that went wrong on 2026-09-19 ──────────
+  //
+  // All three are about the 290ms window between a swipe and the card being gone.
+  // None of them were reachable from the old suite, because the old suite only ever
+  // called decide() one at a time and never from the end of the stack.
+
+  await test('a second swipe inside the animation window decides the next photo', async () => {
+    const res = await pc.validateSelection(await goodExport(4));
+    await pc.startSession(res.entries, res.manifest);
+    // Two swipes back to back, faster than the 290ms settle. This is how the app is
+    // actually used. The second one used to overwrite the first photo's decision and
+    // leave the second undecided.
+    pc.decide('delete');
+    pc.decide('keep');
+    eq('each decision landed on its own photo', pc.photos.map(p => p.decision),
+       ['delete', 'keep', null, null]);
+    eq('no duplicate in the undo stack', pc.decisionStack, [0, 1]);
+    // The second card is still animating, so the index has moved once, not twice.
+    eq('showing the second photo', pc.index, 1);
+    pc.settleNow();
+    eq('and the third once its card is gone', pc.index, 2);
+  });
+
+  await test('swiping at the end of the stack is a no-op, not a crash', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('delete');
+    pc.decide('delete');
+    pc.decide('delete');
+    pc.settleNow();                       // flush the last card away
+    eq('index is past the end', pc.index, 3);
+    // #end-of-stack lives inside #screen-swiper, so the swipe listeners are still
+    // live here. This used to throw on photos[photos.length].decision and wedge the
+    // session with nothing on screen to say why.
+    pc.decide('keep');
+    eq('decisions untouched', pc.photos.map(p => p.decision), ['delete', 'delete', 'delete']);
+    eq('index untouched', pc.index, 3);
+    eq('undo stack untouched', pc.decisionStack, [0, 1, 2]);
+  });
+
+  await test('undo inside the animation window is not undone by the pending advance', async () => {
+    const res = await pc.validateSelection(await goodExport(4));
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('delete');
+    pc.undo();                            // before the 290ms settle fires
+    eq('decision cleared', pc.photos[0].decision, null);
+    eq('back on the first photo', pc.index, 0);
+    await new Promise(r => setTimeout(r, 400));
+    eq('still on the first photo after the window closes', pc.index, 0);
+    eq('still cleared', pc.photos[0].decision, null);
+  });
+
+  await test('a decision still in flight does not leak into the next session', async () => {
+    const first = await pc.validateSelection(await goodExport(4));
+    await pc.startSession(first.entries, first.manifest);
+    pc.decide('delete');                  // deliberately left mid-animation
+    // Loading another export now — "Select new photos", or just a second folder —
+    // used to let the pending advance run against the new photos array, moving the
+    // index by a number computed for photos that were no longer loaded.
+    const second = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(second.entries, second.manifest);
+    eq('new session starts at the first photo', pc.index, 0);
+    eq('nothing decided', pc.photos.map(p => p.decision), [null, null, null]);
+    await new Promise(r => setTimeout(r, 400));
+    eq('and the old timer never fires into it', pc.index, 0);
+    eq('still nothing decided', pc.photos.map(p => p.decision), [null, null, null]);
+    eq('undo stack is empty', pc.decisionStack, []);
+  });
+
+  await test('the delete string never contains an undecided photo', async () => {
+    const res = await pc.validateSelection(await goodExport(5));
+    await pc.startSession(res.entries, res.manifest);
+    pc.decide('delete');                  // 1
+    pc.decide('keep');                    // 2
+    pc.decide('delete');                  // 3
+    pc.settleNow();
+    eq('only the two deletes', pc.buildInput(), '1,3');
+    eq('4 and 5 are still undecided', pc.photos.slice(3).map(p => p.decision), [null, null]);
   });
 
   const failed = results.filter(r => !r.pass);

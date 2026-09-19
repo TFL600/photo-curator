@@ -31,13 +31,29 @@ OPTIONAL = ['WhatsApp']
 
 
 def albums(db):
-    """Every user album, with its member count and when it was made."""
+    """Every *live* user album, with its *live* member count and when it was made.
+
+    Both filters are the point, and both were missing once. ZGENERICALBUM keeps a
+    row for an album after it has been deleted (ZTRASHEDSTATE = 1), and Z_33ASSETS
+    keeps the membership rows of assets that are sitting in Recently Deleted. Without
+    the filters this reported three albums called Triage holding 211, 170 and 0
+    items, when Photos had exactly one holding none of them — which is a false alarm
+    on the one condition this script exists to detect, and it sent a real
+    investigation down a dead end on 2026-09-19.
+
+    A checker that cries wolf about the most dangerous failure mode is worse than no
+    checker, because the next real duplicate gets waved away as "that thing again".
+    """
     rows = db.execute("""
         select a.Z_PK, a.ZTITLE,
                datetime(a.ZCREATIONDATE + 978307200, 'unixepoch', 'localtime'),
-               (select count(*) from Z_33ASSETS j where j.Z_33ALBUMS = a.Z_PK)
+               (select count(*)
+                  from Z_33ASSETS j join ZASSET s on s.Z_PK = j.Z_3ASSETS
+                 where j.Z_33ALBUMS = a.Z_PK and s.ZTRASHEDSTATE = 0)
           from ZGENERICALBUM a
-         where a.ZTITLE is not null""").fetchall()
+         where a.ZTITLE is not null
+           and a.ZKIND = 2
+           and a.ZTRASHEDSTATE = 0""").fetchall()
     out = {}
     for pk, title, created, members in rows:
         out.setdefault(title, []).append((pk, created, members))
@@ -67,8 +83,9 @@ def main():
             problems.append(
                 f'{name}: {len(copies)} albums share this name. Every shortcut '
                 f'resolves it by name, so which one they each get is undefined — '
-                f'delete all but one in Photos. It does not matter which: the '
-                f'export rebuilds Triage from scratch every run.')
+                f'merge them in Photos and keep one. Which one to keep is no longer '
+                f'arbitrary: Triage accumulates, so whatever is in it IS the backlog. '
+                f'Move the members into the survivor before deleting the spares.')
             for pk, created, members in sorted(copies, key=lambda c: c[1]):
                 problems.append(f'    created {created}, {members} item(s)')
         elif not copies and name in REQUIRED:

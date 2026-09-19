@@ -1734,6 +1734,10 @@ function releasePhotos() {
 // entries are already in the order that defines identity: for an export that is
 // ascending index, for a quick pick it is only the order the picker handed them over.
 async function startSession(entries, mf) {
+  // A decision made 290ms ago is still in flight. Starting a new session without
+  // dropping it lets that advance run against the *new* photos array, moving the
+  // index by a number computed for photos that are no longer loaded.
+  cancelSettle();
   releasePhotos();
   manifest = mf;
   manifestKey = manifestKeyFor(mf);
@@ -2782,12 +2786,16 @@ document.getElementById('btn-rotate').addEventListener('click', () => {
 
 function navigateTo(i) {
   if (i < 0 || i >= photos.length) return;
+  cancelSettle();
   index = i;
   photoContainer.classList.remove('animating');
   loadPhoto(index);
 }
 
 function undo() {
+  // Without this, undoing inside the 290ms window let the pending advance fire
+  // afterwards and skip straight back past the photo just recovered.
+  cancelSettle();
   if (decisionStack.length === 0) return;
   hideEndOfStack();
   const lastDecided = decisionStack.pop();
@@ -2834,7 +2842,43 @@ async function saveSessionData() {
   } catch (_) {}
 }
 
+// A decision is not finished when decide() returns: the card animates for 290ms and
+// only then does `index` move on. Two things used to go wrong in that window.
+//
+// Swipe again before it closes and the second decide() read the *same* `index`,
+// overwriting the first photo's decision, pushing a duplicate onto decisionStack and
+// leaving the next photo undecided. Swiping fast is the normal way to use this app,
+// so this was not an edge case.
+//
+// Worse, #end-of-stack is a child of #screen-swiper, so the swipe listeners stay live
+// underneath it while `index === photos.length`. A swipe there ran
+// photos[photos.length].decision = action, which throws, and an uncaught throw in a
+// touch handler leaves the session wedged with no message — "it just completely
+// glitched".
+//
+// settleNow() closes the in-flight decision immediately rather than dropping the new
+// one, so fast swiping stays fast and every decision lands on the photo it was made on.
+let pendingAdvance = null;
+let settleTimer = null;
+
+function settleNow() {
+  if (settleTimer !== null) { clearTimeout(settleTimer); settleTimer = null; }
+  if (!pendingAdvance) return;
+  const fn = pendingAdvance;
+  pendingAdvance = null;
+  fn();
+}
+
+// Drop the pending advance without running it — for undo and manual navigation, where
+// the whole point is that `index` must not jump forward afterwards.
+function cancelSettle() {
+  if (settleTimer !== null) { clearTimeout(settleTimer); settleTimer = null; }
+  pendingAdvance = null;
+}
+
 function decide(action) {
+  settleNow();
+  if (!(index >= 0 && index < photos.length)) return;
   const decidedIndex = index;
   photos[decidedIndex].decision = action;
   decisionStack.push(decidedIndex);
@@ -2855,7 +2899,7 @@ function decide(action) {
   }
   photoContainer.style.opacity = '0';
 
-  setTimeout(() => {
+  pendingAdvance = () => {
     photoContainer.classList.remove('animating');
     const next = findNext(decidedIndex);
     if (next !== -1) {
@@ -2871,7 +2915,8 @@ function decide(action) {
         showConfirm();
       }
     }
-  }, 290);
+  };
+  settleTimer = setTimeout(settleNow, 290);
 }
 
 // ── Touch / swipe / zoom / pan ───────────────────────────
@@ -2890,7 +2935,15 @@ function pinchDist(touches) {
 const swiper = document.getElementById('screen-swiper');
 let controlsTouch = false;
 
+// #end-of-stack sits inside #screen-swiper, so these listeners stay live underneath
+// it. Dragging a card that is no longer the current photo is meaningless there, and
+// used to throw. decide() guards itself too; this stops the card moving at all.
+function swipeLocked() {
+  return endOfStack.classList.contains('active') || !(index >= 0 && index < photos.length);
+}
+
 swiper.addEventListener('touchstart', (e) => {
+  if (swipeLocked()) return;
   controlsTouch = !!e.target.closest('#video-controls');
   if (controlsTouch) return;
   if (e.touches.length === 2) {
@@ -2912,6 +2965,7 @@ swiper.addEventListener('touchstart', (e) => {
 }, { passive: true });
 
 swiper.addEventListener('touchmove', (e) => {
+  if (swipeLocked()) return;
   if (controlsTouch) return;
   if (e.touches.length === 2 && pinching) {
     const dist = pinchDist(e.touches);
@@ -2953,6 +3007,7 @@ swiper.addEventListener('touchmove', (e) => {
 }, { passive: true });
 
 swiper.addEventListener('touchend', (e) => {
+  if (swipeLocked()) { controlsTouch = false; dragging = false; draggingUp = false; return; }
   if (controlsTouch) { controlsTouch = false; return; }
   if (pinching) {
     pinching = false;
@@ -3024,7 +3079,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.getElementById('btn-undo').addEventListener('click', undo);
-document.getElementById('btn-stop').addEventListener('click', showConfirm);
+document.getElementById('btn-stop').addEventListener('click', () => { cancelSettle(); showConfirm(); });
 
 // ── End of stack ────────────────────────────────────────
 const endOfStack = document.getElementById('end-of-stack');
@@ -3041,6 +3096,7 @@ function hideEndOfStack() {
 }
 
 document.getElementById('btn-show-unsorted').addEventListener('click', () => {
+  cancelSettle();
   hideEndOfStack();
   const i = photos.findIndex(p => p.decision === null);
   if (i !== -1) navigateTo(i);
@@ -3228,6 +3284,7 @@ btnCopy.addEventListener('click', () => {
 
 // ── Restart swiping (same photos, reset decisions) ──────
 document.getElementById('btn-reswipe').addEventListener('click', () => {
+  cancelSettle();
   photos.forEach(p => { p.decision = null; });
   forgetDecisions();
   burstQueue = [];
@@ -3244,6 +3301,7 @@ document.getElementById('btn-reswipe').addEventListener('click', () => {
 
 // ── Select new photos ────────────────────────────────────
 btnRestart.addEventListener('click', () => {
+  cancelSettle();
   releasePhotos();
   manifest = null;
   index = 0;
@@ -3273,6 +3331,8 @@ if (new URLSearchParams(location.search).has('test')) {
     get burstCurrent() { return burstCurrent; },
     get photos() { return photos; },
     get index() { return index; },
+    get decisionStack() { return decisionStack; },
+    settleNow, cancelSettle,
     get manifest() { return manifest; },
     get stageItems() { return stageItems; },
     get stagePicked() { return stagePicked; },
