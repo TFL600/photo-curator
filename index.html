@@ -41,7 +41,15 @@
       background: var(--bg);
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: none;
+      /* A long press on a photo selected it as text, or raised the save-image
+         callout, mid-swipe. Nothing in this app is prose to copy, except the
+         debug index strings, which opt back in below. */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
+    img, video { -webkit-user-drag: none; -webkit-touch-callout: none; }
+    pre, code, input { -webkit-user-select: text; user-select: text; }
 
     /* ── SCREENS ── */
     .screen {
@@ -954,20 +962,30 @@
       margin-top: 6px;
       line-height: 1.4;
     }
+    /* Laid out like the camera roll: edge to edge, hairline gaps, three square
+       tiles across, one continuous scroll that opens at the newest. Tiles are big
+       enough to judge a photo without opening it, and every one is shown at full
+       strength — dimming the untapped ones made the whole grid hard to read, and
+       the green ring and tick already say which are picked. */
     .stage-grid {
       flex: 1 1 auto;
       min-height: 0;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
       align-content: start;
-      padding-bottom: 8px;
+      margin: 0 -16px;
+      touch-action: manipulation;
+    }
+    @media (min-width: 600px) {
+      .stage-grid { grid-template-columns: repeat(5, 1fr); }
     }
     .stage-cell {
       position: relative;
       aspect-ratio: 1;
-      border-radius: var(--radius-md);
       overflow: hidden;
       background: var(--border);
       cursor: pointer;
@@ -977,31 +995,29 @@
       height: 100%;
       object-fit: cover;
       display: block;
-      transition: transform 0.15s ease, opacity 0.15s ease;
     }
     .stage-cell::after {
       content: '';
       position: absolute;
       inset: 0;
-      border-radius: var(--radius-md);
       box-shadow: inset 0 0 0 0 var(--keep);
       transition: box-shadow 0.15s ease;
       pointer-events: none;
     }
     .stage-cell.picked::after { box-shadow: inset 0 0 0 4px var(--keep); }
-    .stage-cell.picked img { transform: scale(0.92); }
-    .stage-cell:not(.picked) img { opacity: 0.55; }
     .stage-tick {
       position: absolute;
-      top: 5px;
-      right: 5px;
-      width: 22px;
-      height: 22px;
+      bottom: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      border: 2px solid #fff;
+      box-sizing: border-box;
       border-radius: 50%;
       background: var(--keep);
       color: #fff;
-      font-size: 13px;
-      line-height: 22px;
+      font-size: 12px;
+      line-height: 20px;
       text-align: center;
       opacity: 0;
       transform: scale(0.6);
@@ -1095,6 +1111,7 @@
       overflow-y: auto; overflow-x: hidden;
       -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
       scroll-snap-type: y mandatory;
+      touch-action: pan-y;
       padding: 10px 10px 6px;
     }
     .burst-scroll.free { scroll-snap-type: none; }
@@ -1128,6 +1145,15 @@
       box-shadow: var(--shadow-sm);
     }
     .burst-card.ticked .burst-badge { background: var(--keep-bg); border-color: #fff; }
+    .burst-badge { pointer-events: none; }
+
+    .burst-zoom-btn {
+      position: absolute; right: 10px; top: 10px;
+      width: 40px; height: 40px; border: none; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; line-height: 1; color: #fff;
+      background: rgba(30, 27, 23, 0.55);
+    }
 
     .burst-state {
       position: absolute; left: 10px; bottom: 10px;
@@ -1157,7 +1183,7 @@
     .burst-tally b { font-weight: 600; }
     .burst-foot .btn-primary { width: auto; flex: 0 0 auto; padding: 12px 26px; margin: 0; }
 
-    /* Full-screen look at one frame. Double tap opens it; it never ticks. */
+    /* Full-screen look at one frame. Its own button opens it; it never ticks. */
     #burst-zoom {
       display: none; position: fixed; inset: 0; z-index: 60;
       background: rgba(12, 10, 8, 0.96);
@@ -1496,7 +1522,31 @@ function showScreen(name) {
   screens[name].classList.add('active');
   document.body.style.overflow = name === 'swiper' ? 'hidden' : '';
   document.body.style.background = name === 'swiper' ? '#0a0a0a' : '';
+  holdScreenOn(name !== 'landing' && name !== 'manual');
 }
+
+// A web page cannot set the screen brightness — no browser exposes it — so the
+// most it can do is stop the phone dimming and locking while a batch is being
+// judged. Auto-Brightness dimming a dark swipe screen is the same complaint from
+// the other side. iOS releases the lock whenever the page is hidden, so it is
+// taken again on the way back.
+let wakeLock = null;
+let wantWakeLock = false;
+async function holdScreenOn(on) {
+  wantWakeLock = on;
+  if (!('wakeLock' in navigator)) return;
+  try {
+    if (on && !wakeLock && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) {
+      const l = wakeLock; wakeLock = null; await l.release();
+    }
+  } catch (_) { wakeLock = null; }   // refused (low power mode, no gesture yet): harmless
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && wantWakeLock) holdScreenOn(true);
+});
 
 // ── Export folder parsing ───────────────────────────────
 // The export Shortcut writes one file per asset, named with the asset's
@@ -1971,7 +2021,6 @@ function renderStage(kind, items) {
     ' Tap the ones you want to swipe; the rest go straight to the delete pile.';
 
   stageGrid.innerHTML = '';
-  stageGrid.scrollTop = 0;
   items.forEach(p => {
     const cell = document.createElement('div');
     cell.className = 'stage-cell';
@@ -2006,6 +2055,10 @@ function renderStage(kind, items) {
 
   updateStageTally();
   showScreen('stage');
+  // Opens at the bottom, as the camera roll does: the album is Date Taken
+  // ascending, so the newest are last. Tiles are square, so the height is known
+  // before a single image has decoded.
+  stageGrid.scrollTop = stageGrid.scrollHeight;
 }
 
 // The buttons say what they will do, with live counts. "Continue" did not: with
@@ -2539,7 +2592,7 @@ function renderBurst() {
     `Burst ${burstDone + 1} of ${total} · ${cluster.photos.length} photos` +
     `<small>${cluster.loose
       ? 'Loosely related, so everything starts kept — untick what you do not want.'
-      : 'Best frame first. Tap to keep, double tap for a closer look.'}</small>`;
+      : 'Best frame first. Tap a photo to keep it, ⤢ for a closer look.'}</small>`;
 
   const free = !BURST.snapScrolling || cluster.photos.length > BURST.freeScrollAbove;
   burstScroll.classList.toggle('free', free);
@@ -2576,32 +2629,36 @@ function burstCard(cluster, p, i) {
   const state = document.createElement('div');
   state.className = 'burst-state';
 
-  const badge = document.createElement('button');
+  const badge = document.createElement('div');
   badge.className = 'burst-badge';
-  badge.setAttribute('aria-label', 'Keep this photo');
+  badge.setAttribute('aria-hidden', 'true');
 
-  card.append(media, rank, state, badge);
+  const zoom = document.createElement('button');
+  zoom.className = 'burst-zoom-btn';
+  zoom.setAttribute('aria-label', 'Look closer');
+  zoom.textContent = '⤢';
+
+  card.append(media, rank, state, badge, zoom);
   card._photo = p;
   card._state = state;
   card._badge = badge;
   paintCard(cluster, card);
 
-  // One tap toggles, two opens the photo. The single tap has to wait out the
-  // double-tap window, otherwise every zoom flickers the tick on its way open.
-  let tapTimer = null;
-  const toggle = () => {
+  // A tap anywhere on the card keeps or un-keeps it, at once. It used to wait
+  // out a double-tap window so a double tap could open the zoom, and on the phone
+  // that read as a dead tick: iOS took the second of two quick taps as a zoom
+  // gesture, and the first landed a quarter-second late if at all. The closer
+  // look is its own button now, so a tap never has to guess.
+  card.addEventListener('click', (e) => {
+    e.preventDefault();
     if (cluster.ticked.has(p)) cluster.ticked.delete(p); else cluster.ticked.add(p);
     paintCard(cluster, card);
     updateBurstTally();
-  };
-  card.addEventListener('click', (e) => {
+  });
+  zoom.addEventListener('click', (e) => {
     e.preventDefault();
-    if (tapTimer) {
-      clearTimeout(tapTimer); tapTimer = null;
-      openBurstZoom(p);
-      return;
-    }
-    tapTimer = setTimeout(() => { tapTimer = null; toggle(); }, 230);
+    e.stopPropagation();
+    openBurstZoom(p);
   });
   return card;
 }

@@ -107,10 +107,9 @@ function burstCards() {
   return [...document.querySelectorAll('#burst-scroll .burst-card')];
 }
 
-// A tap is one click; the app waits out the double-tap window before acting on it.
+// A tap is one click, and it acts at once.
 async function tapCard(n) {
   burstCards()[n].click();
-  await new Promise(r => setTimeout(r, 280));
 }
 
 function videoFile(name) {
@@ -285,6 +284,26 @@ export async function run(filter) {
     eq('3 items staged', pc.stageItems.length, 3);
     eq('grid cells rendered', document.querySelectorAll('#stage-grid .stage-cell').length, 3);
     eq('nothing picked yet', pc.stagePicked.size, 0);
+  });
+
+  await test('the staging grid shows every tile at full strength, newest last', async () => {
+    const files = await goodExport(30);
+    files.push(textFile('group-whatsapp.txt',
+      Array.from({ length: 30 }, (_, i) => `IMG_${1001 + i}.HEIC`).join('\n')));
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    const cells = [...document.querySelectorAll('#stage-grid .stage-cell')];
+    eq('all thirty in one grid', cells.length, 30);
+    const img = cells[0].querySelector('img');
+    eq('untapped is not dimmed', getComputedStyle(img).opacity, '1');
+    cells[0].click();
+    eq('tapped is not dimmed either', getComputedStyle(img).opacity, '1');
+    eq('three across on a phone, five on anything wider', getComputedStyle(document.getElementById('stage-grid'))
+      .gridTemplateColumns.split(' ').length, innerWidth >= 600 ? 5 : 3);
+    const g = document.getElementById('stage-grid');
+    check('opens at the bottom, like the camera roll',
+      g.scrollHeight <= g.clientHeight || g.scrollTop + g.clientHeight >= g.scrollHeight - 2,
+      `${g.scrollTop} + ${g.clientHeight} of ${g.scrollHeight}`);
   });
 
   await test('untapped staged items go to the delete pile, tapped ones to the stack', async () => {
@@ -668,6 +687,20 @@ export async function run(filter) {
     window.confirm = realConfirm;
     check('it asked', /Delete all 3/.test(asked), asked);
     eq('and nothing was decided', pc.photos.filter(p => p.decision).length, 0);
+  });
+
+  await test('a tap on a burst card keeps it at once, and the zoom never ticks', async () => {
+    const files = await burstExport([7, 7, 7, 41]);
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    burstCards()[1].click();
+    check('kept with no wait', pc.burstCurrent.ticked.has(pc.burstCurrent.photos[1]));
+    burstCards()[1].querySelector('.burst-badge').click();
+    check('the tick toggles too', !pc.burstCurrent.ticked.has(pc.burstCurrent.photos[1]));
+    burstCards()[2].querySelector('.burst-zoom-btn').click();
+    eq('zoom opened', document.getElementById('burst-zoom').classList.contains('open'), true);
+    check('and did not tick', !pc.burstCurrent.ticked.has(pc.burstCurrent.photos[2]));
+    document.getElementById('burst-zoom-close').click();
   });
 
   await test('Done can be taken back', async () => {
