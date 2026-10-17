@@ -24,8 +24,17 @@
       --delete-bg: rgba(184, 50, 50, 0.88);
       --radius-md: 12px;
       --radius-lg: 16px;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.11), 0 2px 4px rgba(0,0,0,0.06);
+      /* Two layers each: a tight contact shadow and a soft ambient one, tinted
+         with the ink colour rather than pure black so they sit on the warm paper. */
+      --shadow-sm: 0 1px 2px rgba(30,27,23,0.06), 0 1px 1px rgba(30,27,23,0.04);
+      --shadow-md: 0 8px 22px -6px rgba(30,27,23,0.22), 0 2px 6px rgba(30,27,23,0.08);
+      --night: #111111;
+      --keep-bright: #2fa862;  /* keep, lifted enough to read on top of a photo */  /* swiper canvas: near-black, so the photo is the brightest thing */
+      /* Aliases the manual and empty-export styles were written against and that
+         were never defined, so their text silently fell back to browser defaults. */
+      --muted: var(--text-light);
+      --fg: var(--text);
+      --display: 'Fraunces';
       --album: #4a6fa5;
       --album-bg: rgba(74, 111, 165, 0.88);
       --safe-top: env(safe-area-inset-top, 0px);
@@ -47,6 +56,16 @@
       -webkit-user-select: none;
       user-select: none;
       -webkit-touch-callout: none;
+      -webkit-font-smoothing: antialiased;
+    }
+    .landing-title, .stage-title, .confirm-title, .manual-title, #end-of-stack h2 {
+      letter-spacing: -0.015em;
+      text-wrap: balance;
+    }
+    .landing-sub, .stage-sub, #end-of-stack p { text-wrap: pretty; }
+    /* Counts that change while you watch should not jiggle sideways. */
+    #swiper-counter, .stat-num, .stage-tally, .index-summary, #btn-stage-go, #btn-stage-all {
+      font-variant-numeric: tabular-nums;
     }
     img, video { -webkit-user-drag: none; -webkit-touch-callout: none; }
     pre, code, input { -webkit-user-select: text; user-select: text; }
@@ -64,7 +83,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: var(--bg);
+      background: radial-gradient(120% 55% at 50% 0%, #fffbf5 0%, var(--bg) 70%);
       padding: 32px 28px;
       padding-top: calc(32px + var(--safe-top));
       padding-bottom: calc(32px + var(--safe-bottom));
@@ -73,13 +92,13 @@
     .landing-icon-wrap {
       width: 84px;
       height: 84px;
-      background: var(--text);
-      border-radius: 22px;
+      background: linear-gradient(160deg, #3b342d 0%, #14110e 100%);
+      border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 28px;
-      box-shadow: var(--shadow-md);
+      box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.12);
     }
     .landing-icon-wrap svg {
       width: 40px;
@@ -109,25 +128,34 @@
       margin-bottom: 16px;
     }
 
+    /* The three gestures as chips, each arrow in the colour its decision wears
+       everywhere else — red delete, blue album, green keep. */
     .landing-hints {
       display: flex;
-      gap: 24px;
-      margin-bottom: 24px;
-      opacity: 0.65;
+      gap: 8px;
+      margin-bottom: 28px;
     }
     .landing-hint-item {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 3px;
+      gap: 6px;
+      padding: 6px 11px 6px 9px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
     }
     .landing-hint-arrow {
-      font-size: 17px;
+      font-size: 14px;
+      font-weight: 600;
       color: var(--text-light);
       line-height: 1;
     }
+    .landing-hint-item:nth-child(1) .landing-hint-arrow { color: var(--delete); }
+    .landing-hint-item:nth-child(2) .landing-hint-arrow { color: var(--album); }
+    .landing-hint-item:nth-child(3) .landing-hint-arrow { color: var(--keep); }
     .landing-hint-text {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.09em;
@@ -136,7 +164,7 @@
 
     .landing-last {
       width: 100%;
-      max-width: 300px;
+      max-width: 320px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -258,9 +286,12 @@
     }
     .export-banner-warn {
       font-size: 12px;
-      color: var(--delete);
-      margin-top: 6px;
+      color: #8e2a2a;
+      margin-top: 10px;
       line-height: 1.5;
+      background: rgba(184,50,50,0.06);
+      border-radius: 8px;
+      padding: 8px 10px;
     }
 
     .index-summary {
@@ -273,18 +304,18 @@
     .btn-primary {
       width: 100%;
       max-width: 300px;
-      background: var(--text);
+      background: linear-gradient(180deg, #2c2722 0%, #171411 100%);
       color: #fff;
       border: none;
       border-radius: 999px;
       font-family: 'Outfit', sans-serif;
       font-size: 17px;
-      font-weight: 500;
-      padding: 17px 40px;
+      font-weight: 600;
+      padding: 16px 32px;
       cursor: pointer;
       transition: transform 0.12s, opacity 0.12s;
-      min-height: 56px;
-      box-shadow: var(--shadow-md);
+      min-height: 54px;
+      box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.1);
     }
     .btn-primary:active { transform: scale(0.97); opacity: 0.9; }
     .btn-primary.loading { opacity: 0.75; cursor: default; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -302,9 +333,33 @@
 
     #file-input { display: none; }
 
+    /* One column of actions, one width, one rhythm. */
+    #screen-landing > .btn-primary,
+    #screen-landing > .btn-secondary,
+    #screen-landing > .btn-tertiary { width: 100%; max-width: 320px; }
+    #screen-landing > .btn-secondary { margin-top: 10px; }
+    #screen-landing > .btn-tertiary { margin-top: 6px; }
+
+    /* For the rare, the reversible and the slightly scary: present, but quiet. */
+    .btn-tertiary {
+      background: transparent;
+      border: none;
+      color: var(--text-light);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 12px 16px;
+      min-height: 44px;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: rgba(138,128,117,0.35);
+      text-underline-offset: 3px;
+    }
+    .btn-tertiary:active { color: var(--text); }
+
     /* ── SWIPER ── */
     #screen-swiper {
-      background: #0a0a0a;
+      background: var(--night);
       flex-direction: column;
       overflow: hidden;
     }
@@ -488,6 +543,9 @@
     }
     #hint-left  { left: 22px; align-items: flex-start; }
     #hint-right { right: 22px; align-items: flex-end; }
+    #hint-left  .hint-arrow { color: #ff7b6e; }
+    #hint-right .hint-arrow { color: #6fd39a; }
+    #hint-up    .hint-arrow { color: #8fb3ff; }
     #hint-up {
       bottom: auto;
       top: calc(60px + var(--safe-top));
@@ -498,6 +556,7 @@
     .hint-arrow {
       font-size: 22px;
       color: #fff;
+      font-weight: 600;
       line-height: 1;
       filter: drop-shadow(0 1px 4px rgba(0,0,0,0.55));
     }
@@ -627,7 +686,25 @@
       text-align: center;
       margin-bottom: 20px;
     }
-    .confirm-icon { font-size: 40px; margin-bottom: 10px; }
+    .confirm-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(184,50,50,0.09);
+      color: var(--delete);
+    }
+    .confirm-icon svg {
+      width: 30px; height: 30px; fill: none; stroke: currentColor;
+      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .confirm-icon .icon-done { display: none; }
+    .confirm-header.nothing .confirm-icon { background: rgba(45,106,79,0.1); color: var(--keep); }
+    .confirm-header.nothing .icon-bin { display: none; }
+    .confirm-header.nothing .icon-done { display: block; }
     .confirm-title {
       font-family: 'Fraunces', serif;
       font-size: 26px;
@@ -680,7 +757,7 @@
     .thumb-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 3px;
+      gap: 2px;
       margin-bottom: 20px;
       border-radius: var(--radius-lg);
       overflow: hidden;
@@ -707,6 +784,8 @@
       font-size: 10px;
       font-weight: 700;
       border-radius: 50%;
+      border: 1.5px solid #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -731,21 +810,21 @@
     }
 
     .btn-danger {
-      background: var(--delete);
+      background: linear-gradient(180deg, #c43d3d 0%, #a92b2b 100%);
       color: #fff;
       border: none;
-      border-radius: var(--radius-lg);
+      border-radius: 999px;
       font-family: 'Outfit', sans-serif;
       font-size: 17px;
-      font-weight: 500;
+      font-weight: 600;
       padding: 17px 24px;
       cursor: pointer;
       transition: transform 0.1s, opacity 0.1s;
       min-height: 56px;
       text-align: center;
-      box-shadow: 0 4px 14px rgba(184,50,50,0.28);
+      box-shadow: 0 8px 22px -6px rgba(184,50,50,0.5), inset 0 1px 0 rgba(255,255,255,0.15);
     }
-    .btn-danger:active { transform: scale(0.98); opacity: 0.9; }
+    .btn-danger:active { transform: scale(0.97); opacity: 0.92; }
 
     .actions-secondary {
       background: var(--card);
@@ -813,7 +892,7 @@
       background: var(--album);
       color: #fff;
       border: none;
-      border-radius: var(--radius-lg);
+      border-radius: 999px;
       font-family: 'Outfit', sans-serif;
       font-size: 17px;
       font-weight: 500;
@@ -876,7 +955,7 @@
       position: absolute;
       inset: 0;
       z-index: 50;
-      background: #0a0a0a;
+      background: var(--night);
       display: none;
       flex-direction: column;
       align-items: center;
@@ -989,20 +1068,24 @@
       transition: box-shadow 0.15s ease;
       pointer-events: none;
     }
-    .stage-cell.picked::after { box-shadow: inset 0 0 0 4px var(--keep); }
+    .stage-cell.picked::after {
+      box-shadow: inset 0 0 0 3px var(--keep-bright), inset 0 0 0 4px rgba(255,255,255,0.55);
+    }
     .stage-tick {
       position: absolute;
       bottom: 6px;
       right: 6px;
-      width: 24px;
-      height: 24px;
+      width: 26px;
+      height: 26px;
       border: 2px solid #fff;
       box-sizing: border-box;
       border-radius: 50%;
-      background: var(--keep);
+      background: var(--keep-bright);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.35);
       color: #fff;
-      font-size: 12px;
-      line-height: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 22px;
       text-align: center;
       opacity: 0;
       transform: scale(0.6);
@@ -1017,7 +1100,13 @@
       color: #fff;
       text-shadow: 0 1px 3px rgba(0,0,0,0.6);
     }
-    .stage-foot { flex: 0 0 auto; padding-top: 12px; }
+    .stage-foot {
+      flex: 0 0 auto;
+      margin: 0 -16px;
+      padding: 12px 16px 0;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
     .stage-tally {
       text-align: center;
       font-size: 13px;
@@ -1026,14 +1115,25 @@
     }
     .stage-tally b { color: var(--text); font-weight: 600; }
     .stage-actions { display: flex; gap: 10px; }
-    .stage-actions button { flex: 1; }
+    /* The labels carry live counts ("Delete 18, swipe 2"); a pill that wraps to
+       two lines reads as broken, so these trade side padding for one line. */
+    .stage-actions button {
+      flex: 1 1 0;
+      min-width: 0;
+      padding-left: 10px;
+      padding-right: 10px;
+      font-size: 15px;
+      white-space: nowrap;
+    }
+    .stage-actions .btn-primary { flex-grow: 1.5; }
 
     /* Shared by the staging screen's secondary action. */
     .btn-secondary {
       width: 100%;
       padding: 15px 20px;
+      min-height: 54px;
       border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
+      border-radius: 999px;
       background: var(--card);
       color: var(--text);
       font-family: 'Outfit', sans-serif;
@@ -1041,8 +1141,9 @@
       font-weight: 500;
       cursor: pointer;
       box-shadow: var(--shadow-sm);
+      transition: transform 0.12s, background 0.12s;
     }
-    .btn-secondary:active { transform: scale(0.985); }
+    .btn-secondary:active { transform: scale(0.97); background: #fbf9f6; }
 
     .empty-export {
       background: rgba(127,127,127,0.09); border-radius: 14px;
@@ -1126,7 +1227,7 @@
   </div>
   <button class="btn-primary" id="btn-select">Open Export Folder</button>
   <button class="btn-secondary" id="btn-manual-help">Manual selection this time</button>
-  <button class="btn-secondary" id="btn-undo-batch">Undo last batch's triage marks</button>
+  <button class="btn-tertiary" id="btn-undo-batch">Undo last batch's triage marks</button>
   <!-- No accept filter: iOS maps accept="application/json"/.json to a UTType
        inconsistently and greys out manifest.json in the Files picker, which makes the
        export folder impossible to select. Type checking happens in the guard. -->
@@ -1226,7 +1327,10 @@
 <!-- CONFIRM -->
 <div id="screen-confirm" class="screen">
   <div class="confirm-header">
-    <div class="confirm-icon">🗑️</div>
+    <div class="confirm-icon" aria-hidden="true">
+      <svg class="icon-bin" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
+      <svg class="icon-done" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+    </div>
     <h2 class="confirm-title" id="confirm-title">Review</h2>
   </div>
 
@@ -2592,6 +2696,7 @@ function showConfirm() {
   btnDelete.classList.remove('btn-finish');
 
   confirmTitle.textContent = `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`;
+  confirmTitle.parentElement.classList.toggle('nothing', toDelete.length === 0);
   document.getElementById('stat-kept').textContent  = kept;
   document.getElementById('stat-del').textContent   = toDelete.length;
   document.getElementById('stat-album').textContent = toAlbum.length;
