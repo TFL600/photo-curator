@@ -17,7 +17,7 @@ function eq(label, actual, expected) {
 }
 
 // A filter lets the headless runner re-run one area while a fix is being iterated
-// on, without waiting for the burst clustering tests to decode their fixtures.
+// on.
 let nameFilter = null;
 
 async function test(name, fn) {
@@ -49,67 +49,6 @@ function jpegBlob(hue) {
 
 async function photoFile(name, hue = 200) {
   return new File([await jpegBlob(hue)], name, { type: 'image/jpeg' });
-}
-
-// Flat colours are deliberate above: a dHash of a solid block has no bits set,
-// which the app treats as "no structure to compare" and leaves as a singleton.
-// Burst tests need real structure, so these draw a deterministic block pattern —
-// same seed means near-identical frames, and `detail` adds fine lines that lift
-// the Laplacian variance without moving the hash much, which is what "sharper
-// frame, same shot" looks like to the ranker.
-function patternBlob(seed, detail) {
-  const c = document.createElement('canvas');
-  c.width = 64; c.height = 64;
-  const ctx = c.getContext('2d');
-  let st = seed;
-  const rnd = () => (st = (st * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      const v = Math.round(rnd() * 255);
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(x * 8, y * 8, 8, 8);
-    }
-  }
-  if (detail) {
-    // Faint, not bold. At this alpha the Laplacian variance rises about a third
-    // while the 9x8 hash moves by two bits, which is the relationship a sharper
-    // frame of the same shot actually has. Turn it up and the "sharp" frame stops
-    // being a near-duplicate at all, which is a different test.
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    for (let x = 0; x < 64; x += 2) ctx.fillRect(x, 0, 1, 64);
-  }
-  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
-}
-
-async function patternFile(name, seed, detail) {
-  return new File([await patternBlob(seed, detail)], name, { type: 'image/jpeg' });
-}
-
-// specs: one entry per photo, either a seed number or [seed, detail].
-async function burstExport(specs, extra = {}) {
-  const files = [];
-  for (let i = 0; i < specs.length; i++) {
-    const spec = Array.isArray(specs[i]) ? specs[i] : [specs[i], false];
-    files.push(await patternFile(`${i + 1}_IMG_${1000 + i + 1}.HEIC.jpg`, spec[0], spec[1]));
-  }
-  files.push(manifestFile({
-    album: 'Triage',
-    count: specs.length,
-    first: 'IMG_1001.HEIC',
-    last: `IMG_${1000 + specs.length}.HEIC`,
-    exportedAt: '2026-09-06T09:00:00Z',
-    ...extra,
-  }));
-  return files;
-}
-
-function burstCards() {
-  return [...document.querySelectorAll('#burst-scroll .burst-card')];
-}
-
-// A tap is one click, and it acts at once.
-async function tapCard(n) {
-  burstCards()[n].click();
 }
 
 function videoFile(name) {
@@ -304,6 +243,44 @@ export async function run(filter) {
     check('opens at the bottom, like the camera roll',
       g.scrollHeight <= g.clientHeight || g.scrollTop + g.clientHeight >= g.scrollHeight - 2,
       `${g.scrollTop} + ${g.clientHeight} of ${g.scrollHeight}`);
+  });
+
+  // On the phone (2026-10-10) the tiles piled on top of each other. Desktop Chrome
+  // never showed it, so this cannot prove the Safari fix — it pins the geometry the
+  // fix relies on: every tile is square and in its own slot the moment the grid is
+  // rendered, before a single image has decoded, whatever shape the photos are.
+  await test('staging tiles are square and never overlap, before any image loads', async () => {
+    const odd = (w, h, hue) => new Promise(r => {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const x = c.getContext('2d'); x.fillStyle = `hsl(${hue},70%,55%)`; x.fillRect(0, 0, w, h);
+      c.toBlob(r, 'image/jpeg', 0.7);
+    });
+    const files = [];
+    for (let i = 1; i <= 12; i++) {
+      const blob = await odd(i % 2 ? 30 : 80, i % 2 ? 80 : 30, i * 29);
+      files.push(new File([blob], `${i}_IMG_${1000 + i}.HEIC.jpg`, { type: 'image/jpeg' }));
+    }
+    files.push(manifestFile({ album: 'Triage', count: 12, first: 'IMG_1001.HEIC', last: 'IMG_1012.HEIC', exportedAt: 'x' }));
+    files.push(textFile('group-whatsapp.txt', Array.from({ length: 12 }, (_, i) => `IMG_${1001 + i}.HEIC`).join('\n')));
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    const rects = () => [...document.querySelectorAll('#stage-grid .stage-cell')].map(c => c.getBoundingClientRect());
+    const geometry = (rs) => {
+      const bad = [];
+      rs.forEach((r, i) => {
+        if (r.height < 20 || Math.abs(r.width - r.height) > 1) bad.push(`#${i} ${r.width}x${r.height}`);
+      });
+      for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+        const a = rs[i], b = rs[j];
+        const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (ox > 1 && oy > 1) bad.push(`#${i} overlaps #${j}`);
+      }
+      return bad;
+    };
+    eq('square and separate at once', geometry(rects()), []);
+    await new Promise(r => setTimeout(r, 150));
+    eq('and still once the images are in', geometry(rects()), []);
   });
 
   await test('untapped staged items go to the delete pile, tapped ones to the stack', async () => {
@@ -596,160 +573,75 @@ export async function run(filter) {
     eq('matched despite .HEIC in the item name', res.entries[0].videoFile.name, 'v_IMG_1001.mp4');
   });
 
-  // ── Burst clustering ──────────────────────────────────
-  await test('a run of near-identical frames becomes one burst', async () => {
-    const files = await burstExport([7, 7, 7, 41, 99, 123]);
-    const res = await pc.validateSelection(files);
-    check('accepted', !res.errors, errorText(res));
-    await pc.startSession(res.entries, res.manifest);
-    eq('burst review opened', pc.activeScreen(), 'burst');
-    eq('one cluster', pc.burstQueue.length + 1, 1 + 0);
-    eq('three frames in it', pc.burstCurrent.photos.length, 3);
-    eq('the three are the matching ones', pc.burstCurrent.photos.map(p => p.idx).sort((a, b) => a - b), [1, 2, 3]);
-    eq('a card per frame', burstCards().length, 3);
-  });
+  // ── No burst review ───────────────────────────────────
+  // Bursts were removed on 2026-10-17: near-duplicates go through the swipe stack
+  // like everything else. These pin that, and keep the two guarantees the burst
+  // tests used to carry — the confirm-screen rescue and decisions surviving a
+  // reload — now exercised through the staging grid, which is the remaining
+  // path that decides many photos at once.
 
-  await test('flat images are never clustered', async () => {
-    // The existing fixtures are solid colours. Their hashes carry no structure,
-    // so treating them as "similar" would cluster the whole export into one burst.
-    const res = await pc.validateSelection(await goodExport(6));
-    await pc.startSession(res.entries, res.manifest);
-    eq('straight to swiping', pc.activeScreen(), 'swiper');
-    eq('no clusters', pc.burstQueue.length, 0);
-  });
-
-  await test('the sharpest frame leads and is pre-ticked', async () => {
-    const files = await burstExport([[7, false], [7, true], [7, false], 41]);
+  await test('near-identical frames go straight to the swipe stack', async () => {
+    const files = await goodExport(4);
+    files.splice(1, 2, await photoFile('2_IMG_1002.HEIC.jpg', 37), await photoFile('3_IMG_1003.HEIC.jpg', 37));
     const res = await pc.validateSelection(files);
     await pc.startSession(res.entries, res.manifest);
-    eq('cluster of three', pc.burstCurrent.photos.length, 3);
-    eq('the detailed frame is first', pc.burstCurrent.photos[0].idx, 2);
-    eq('one ticked', pc.burstCurrent.ticked.size, 1);
-    check('and it is the first', pc.burstCurrent.ticked.has(pc.burstCurrent.photos[0]));
-    eq('first card reads as kept', burstCards()[0].classList.contains('ticked'), true);
-    eq('the rest read as deleting', burstCards()[1].classList.contains('ticked'), false);
-  });
-
-  await test('keeping four of seven is four taps and one Done', async () => {
-    const files = await burstExport([7, 7, 7, 7, 7, 7, 7]);
-    const res = await pc.validateSelection(files);
-    await pc.startSession(res.entries, res.manifest);
-    eq('one burst of seven', pc.burstCurrent.photos.length, 7);
-    const kept = [pc.burstCurrent.photos[0].idx];
-    // One is already ticked, so three taps add three more. The fourth tap is the
-    // one that would untick something, which is the point: keeping four costs four
-    // interactions including Done.
-    for (const n of [1, 2, 3]) {
-      await tapCard(n);
-      kept.push(pc.burstCurrent.photos[n].idx);
-    }
-    eq('four ticked', pc.burstCurrent.ticked.size, 4);
-    eq('tally says so', document.getElementById('burst-tally').textContent.replace(/\s+/g, ' '), 'Keeping 4 · Deleting 3');
-    pc.finishBurst();
-    eq('kept photos are kept', pc.indicesFor('keep').sort((a, b) => a - b), kept.sort((a, b) => a - b));
-    eq('the other three are for deletion', pc.indicesFor('delete').length, 3);
-    check('no overlap', !pc.indicesFor('delete').some(i => kept.includes(i)));
-  });
-
-  await test('kept burst photos never reappear in the swipe stack', async () => {
-    const files = await burstExport([7, 7, 7, 41]);
-    const res = await pc.validateSelection(files);
-    await pc.startSession(res.entries, res.manifest);
-    const decided = pc.burstCurrent.photos.map(p => p.idx);
-    pc.finishBurst();
-    eq('now swiping the singleton', pc.activeScreen(), 'swiper');
-    eq('on the one photo nobody has judged', pc.photos[pc.index].idx, 4);
-    check('every clustered photo is settled',
-      pc.photos.filter(p => decided.includes(p.idx)).every(p => p.decision !== null));
-  });
-
-  await test('the index string is exactly the unticked clustered photos', async () => {
-    const files = await burstExport([7, 7, 7, 41]);
-    const res = await pc.validateSelection(files);
-    await pc.startSession(res.entries, res.manifest);
-    const order = pc.burstCurrent.photos.map(p => p.idx);
-    pc.finishBurst();
-    pc.decide('keep');            // the singleton
-    const expected = order.slice(1).sort((a, b) => a - b).join(',');
-    eq('delete string', pc.buildInput(), expected);
-  });
-
-  await test('deleting a whole burst has to be confirmed', async () => {
-    const files = await burstExport([7, 7, 7]);
-    const res = await pc.validateSelection(files);
-    await pc.startSession(res.entries, res.manifest);
-    await tapCard(0);                     // untick the only ticked one
-    eq('nothing ticked', pc.burstCurrent.ticked.size, 0);
-    const realConfirm = window.confirm;
-    let asked = '';
-    window.confirm = (msg) => { asked = msg; return false; };
-    pc.finishBurst();
-    window.confirm = realConfirm;
-    check('it asked', /Delete all 3/.test(asked), asked);
-    eq('and nothing was decided', pc.photos.filter(p => p.decision).length, 0);
-  });
-
-  await test('a tap on a burst card keeps it at once, and the zoom never ticks', async () => {
-    const files = await burstExport([7, 7, 7, 41]);
-    const res = await pc.validateSelection(files);
-    await pc.startSession(res.entries, res.manifest);
-    burstCards()[1].click();
-    check('kept with no wait', pc.burstCurrent.ticked.has(pc.burstCurrent.photos[1]));
-    burstCards()[1].querySelector('.burst-badge').click();
-    check('the tick toggles too', !pc.burstCurrent.ticked.has(pc.burstCurrent.photos[1]));
-    burstCards()[2].querySelector('.burst-zoom-btn').click();
-    eq('zoom opened', document.getElementById('burst-zoom').classList.contains('open'), true);
-    check('and did not tick', !pc.burstCurrent.ticked.has(pc.burstCurrent.photos[2]));
-    document.getElementById('burst-zoom-close').click();
-  });
-
-  await test('Done can be taken back', async () => {
-    const files = await burstExport([7, 7, 7, 41]);
-    const res = await pc.validateSelection(files);
-    await pc.startSession(res.entries, res.manifest);
-    pc.finishBurst();
-    eq('decisions made', pc.photos.filter(p => p.decision).length, 3);
-    document.getElementById('undo-toast-btn').click();
-    eq('back on the burst', pc.activeScreen(), 'burst');
-    eq('nothing decided', pc.photos.filter(p => p.decision).length, 0);
-    eq('same cluster, same size', burstCards().length, 3);
+    eq('swiper, no review screen', pc.activeScreen(), 'swiper');
+    eq('nothing pre-decided', pc.photos.map(p => p.decision), [null, null, null, null]);
+    check('no burst screen in the page', !document.getElementById('screen-burst'));
   });
 
   await test('a photo bound for deletion can be rescued on the confirm screen', async () => {
-    const files = await burstExport([7, 7, 7]);
+    const files = await goodExport(3);
+    files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC\nIMG_1003.HEIC'));
     const res = await pc.validateSelection(files);
     await pc.startSession(res.entries, res.manifest);
-    pc.finishBurst();
+    pc.commitStage();
     eq('confirm screen', pc.activeScreen(), 'confirm');
-    eq('two for deletion', pc.indicesFor('delete').length, 2);
+    eq('three for deletion', pc.indicesFor('delete').length, 3);
     document.querySelectorAll('#thumb-grid .thumb-item')[0].click();
-    eq('one rescued', pc.indicesFor('delete').length, 1);
-    eq('and it is kept', pc.indicesFor('keep').length, 2);
+    eq('one rescued', pc.indicesFor('delete').length, 2);
+    eq('and it is kept', pc.indicesFor('keep').length, 1);
   });
 
   await test('decisions survive closing the tab', async () => {
     pc.setPersistence(true);
     const stamp = 'persist-' + Date.now();
-    const files = await burstExport([7, 7, 7, 41], { folder: stamp, exportedAt: stamp });
-    const res = await pc.validateSelection(files);
+    const make = async () => {
+      const files = await goodExport(4, { folder: stamp, exportedAt: stamp });
+      files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC'));
+      return files;
+    };
+    const res = await pc.validateSelection(await make());
     await pc.startSession(res.entries, res.manifest);
-    pc.finishBurst();
+    pc.commitStage();
+    pc.decide('keep');
+    pc.settleNow();
     const before = { keep: pc.indicesFor('keep'), del: pc.indicesFor('delete') };
+    eq('staged deletes and one swipe', [before.del, before.keep], [[1, 2], [3]]);
     // Same folder, opened again: this is what reloading the page does.
-    const again = await pc.validateSelection(await burstExport([7, 7, 7, 41], { folder: stamp, exportedAt: stamp }));
+    const again = await pc.validateSelection(await make());
     await pc.startSession(again.entries, again.manifest);
     eq('keeps came back', pc.indicesFor('keep'), before.keep);
     eq('deletes came back', pc.indicesFor('delete'), before.del);
+    eq('resumes at the first undecided photo', pc.index, 3);
     pc.forgetDecisions();
     pc.setPersistence(false);
   });
 
-  await test('hashing and distance', () => {
-    const a = { h0: 0, h1: 0 }, b = { h0: 1, h1: 0 }, c = { h0: 0, h1: 3 };
-    eq('identical', pc.hamming(a, a), 0);
-    eq('one bit low word', pc.hamming(a, b), 1);
-    eq('two bits high word', pc.hamming(a, c), 2);
-    eq('symmetric', pc.hamming(b, c), pc.hamming(c, b));
+  await test('the thumb strip tiles are twice the old size', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    const t = document.querySelector('#thumb-strip .strip-thumb').getBoundingClientRect();
+    eq('108px square', [Math.round(t.width), Math.round(t.height)], [108, 108]);
+    const strip = document.getElementById('thumb-strip').getBoundingClientRect();
+    const photo = document.getElementById('photo-container').getBoundingClientRect();
+    check('the photo stops above the strip', photo.bottom <= strip.top + 1,
+          `photo bottom ${photo.bottom}, strip top ${strip.top}`);
+    const undo = document.getElementById('btn-undo');
+    undo.style.display = 'block';
+    const u = undo.getBoundingClientRect();
+    undo.style.display = '';
+    check('undo sits above the strip', u.bottom <= strip.top, `undo bottom ${u.bottom}, strip top ${strip.top}`);
   });
 
   // ── Regressions from the session that went wrong on 2026-09-19 ──────────

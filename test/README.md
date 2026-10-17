@@ -10,7 +10,7 @@ node test/run.js
 
 That serves the repo, drives headless Chrome over CDP and exits non-zero on a failure,
 with no dependencies — Chrome is already on the machine and Node 22 has a WebSocket
-client built in. `node test/run.js burst` runs only the tests whose name matches, and
+client built in. `node test/run.js staging` runs only the tests whose name matches, and
 `node test/run.js --head` opens a real window to watch. An uncaught exception on the
 page fails the run even if every check passed, which is how the swipe-window crash would
 have been caught.
@@ -34,16 +34,11 @@ console.table((await m.run()).failures);
 ## What is covered
 
 The guard (every rejection path), index parsing, category sidecars, the staging grid,
-quick pick, the index strings that go to Shortcuts, the confirm screen's two modes, and
-burst clustering end to end — grouping, ranking, ticking, Done, undo, rescue and
-persistence. What is *not* covered is touch handling and video playback, which need a
-real device.
-
-The burst fixtures draw a seeded block pattern rather than a flat colour, because a flat
-image has no structure for a perceptual hash to compare and the app deliberately refuses
-to cluster those. `patternFile(name, seed, detail)` is the knob: same seed means
-near-identical frames, `detail` adds faint fine lines that lift sharpness without moving
-the hash much.
+quick pick, the index strings that go to Shortcuts, the confirm screen's two modes,
+the confirm-screen rescue, decisions persisting across a reload, and the swipe-window
+regressions. What is *not* covered is touch handling, video playback, and anything
+Safari lays out differently from Chrome (the staging grid's tiles overlapped on the
+phone and nowhere else), which need a real device.
 
 ## Shortcuts
 
