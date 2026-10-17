@@ -437,7 +437,7 @@ export async function run(filter) {
     const res = await pc.validateSelection(files);
     await pc.startSession(res.entries, res.manifest);
     const sub = document.getElementById('stage-sub').textContent;
-    check('reports 2 of 10', /^2 of 10 items/.test(sub), sub);
+    check('reports 2 of 10', /^2 of 10\./.test(sub), sub);
   });
 
   await test('the staging buttons name what they will do', async () => {
@@ -494,7 +494,7 @@ export async function run(filter) {
 
     await pc.startSession(res.entries, res.manifest);
     eq('whatsapp staged first', document.getElementById('stage-title').textContent, 'WhatsApp');
-    eq('covers 11 of 17', document.getElementById('stage-sub').textContent.startsWith('11 of 17 items'), true);
+    eq('covers 11 of 17', document.getElementById('stage-sub').textContent.startsWith('11 of 17.'), true);
     pc.commitStage();
     eq('then screenshots', document.getElementById('stage-title').textContent, 'Screenshots');
     pc.commitStage();

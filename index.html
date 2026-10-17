@@ -803,6 +803,23 @@
     }
 
     /* actions */
+    /* Delete stays in thumb reach however long the grid is: it sticks to the
+       bottom while the photos scroll under it, then settles into place above
+       Restart / Select new once the end of the list is reached. */
+    .confirm-dock {
+      position: sticky;
+      bottom: calc(-32px - var(--safe-bottom));
+      z-index: 5;
+      margin: 8px -20px 10px;
+      padding: 10px 20px calc(14px + var(--safe-bottom));
+      background: rgba(247,244,240,0.86);
+      backdrop-filter: blur(14px) saturate(1.4);
+      -webkit-backdrop-filter: blur(14px) saturate(1.4);
+      border-top: 1px solid rgba(232,227,219,0.9);
+      display: flex;
+      flex-direction: column;
+    }
+    .confirm-dock .btn-danger { width: 100%; }
     .confirm-actions {
       display: flex;
       flex-direction: column;
@@ -825,6 +842,11 @@
       box-shadow: 0 8px 22px -6px rgba(184,50,50,0.5), inset 0 1px 0 rgba(255,255,255,0.15);
     }
     .btn-danger:active { transform: scale(0.97); opacity: 0.92; }
+    /* Nothing to delete: the same button only marks the batch, so it is not red. */
+    .btn-danger.btn-finish {
+      background: linear-gradient(180deg, #2c2722 0%, #171411 100%);
+      box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
 
     .actions-secondary {
       background: var(--card);
@@ -1126,6 +1148,11 @@
       white-space: nowrap;
     }
     .stage-actions .btn-primary { flex-grow: 1.5; }
+    /* It bins photos, so it wears the delete colour, like the confirm screen. */
+    #btn-stage-go {
+      background: linear-gradient(180deg, #c43d3d 0%, #a92b2b 100%);
+      box-shadow: 0 8px 22px -6px rgba(184,50,50,0.5), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
 
     /* Shared by the staging screen's secondary action. */
     .btn-secondary {
@@ -1368,9 +1395,12 @@
     <pre id="debug-album-string" style="display:none"></pre>
   </div>
 
-  <div class="confirm-actions">
+  <div class="confirm-dock">
     <div class="index-summary" id="delete-index-summary"></div>
     <button class="btn-danger" id="btn-delete">Delete</button>
+  </div>
+
+  <div class="confirm-actions">
     <div class="actions-secondary">
       <button class="btn-ghost" id="btn-reswipe">Restart swiping</button>
       <button class="btn-ghost" id="btn-restart">Select new photos</button>
@@ -1510,10 +1540,6 @@ const DIAG_RE = /^diag-[a-z0-9_-]+\.txt$/i;
 const COMPANION_RE = /^v_(.+)\.(mp4|m4v|mov)$/i;
 const KIND_ORDER  = ['whatsapp', 'screenshot'];
 const KIND_LABEL  = { whatsapp: 'WhatsApp', screenshot: 'Screenshots' };
-const KIND_BLURB  = {
-  whatsapp:   'Most of these are forwards you will never look at again.',
-  screenshot: 'Most of these did their job the moment you took them.',
-};
 
 // Compare an exported name segment against a sidecar line. The export keeps the
 // original name including its extension ("IMG_2177.HEIC"), but older exports and
@@ -1949,9 +1975,7 @@ function renderStage(kind, items) {
   // most of the batch but reads as a handful means a short sidecar, which is
   // otherwise invisible: the untagged ones just quietly turn up in the swipe stack.
   stageSub.textContent =
-    `${items.length} of ${photos.length} item${photos.length === 1 ? '' : 's'}. ` +
-    (KIND_BLURB[kind] || 'Tap the ones worth a closer look.') +
-    ' Tap the ones you want to swipe; the rest go straight to the delete pile.';
+    `${items.length} of ${photos.length}. Tap any worth a swipe — the rest go to the delete pile.`;
 
   stageGrid.innerHTML = '';
   items.forEach(p => {
@@ -2695,7 +2719,9 @@ function showConfirm() {
   btnDelete.textContent = 'Delete';
   btnDelete.classList.remove('btn-finish');
 
-  confirmTitle.textContent = `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`;
+  confirmTitle.textContent = toDelete.length
+    ? `Delete ${toDelete.length} photo${toDelete.length !== 1 ? 's' : ''}?`
+    : 'Nothing to delete';
   confirmTitle.parentElement.classList.toggle('nothing', toDelete.length === 0);
   document.getElementById('stat-kept').textContent  = kept;
   document.getElementById('stat-del').textContent   = toDelete.length;
