@@ -277,12 +277,39 @@ def _resolve_before_delete(actions, name):
     return []
 
 
+def _delete_input_is_previous_output(actions, name):
+    """Delete Photos must come straight after Get Variable of the list it deletes.
+
+    On 2026-10-31 the phone ignored Delete Photos' `photos` parameter and deleted the
+    previous action's output instead: the keep loop's Repeat Results, 3,240 items
+    that were all keepers. Nothing in the stored plist was wrong. Making the previous
+    action fetch the same variable is the only arrangement where both readings agree.
+    """
+    problems = []
+    for i, a in enumerate(actions):
+        if a['WFWorkflowActionIdentifier'] != 'is.workflow.actions.deletephotos':
+            continue
+        want = a['WFWorkflowActionParameters'].get('photos', {}).get('Value', {}).get('VariableName')
+        prev = actions[i - 1] if i else None
+        got = (prev['WFWorkflowActionParameters'].get('WFVariable', {})
+               .get('Value', {}).get('VariableName')
+               if prev and prev['WFWorkflowActionIdentifier'] == 'is.workflow.actions.getvariable'
+               else None)
+        if not want or got != want:
+            problems.append(
+                f'{name}: action {i} Delete Photos is not directly preceded by Get '
+                f'Variable {want!r}. The phone deletes the previous action\'s output, '
+                f'so whatever sits there is what gets deleted.')
+    return problems
+
+
 def verify_all(built):
     problems = []
     for name, actions in built.items():
         problems += check(actions, name)
         problems += _triaged_marking(actions, name)
         problems += _resolve_before_delete(actions, name)
+        problems += _delete_input_is_previous_output(actions, name)
 
     # The identity contract: whatever resolves positions must resolve them the same
     # way everywhere. A divergence here is undetectable at runtime and deletes the

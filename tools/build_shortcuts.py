@@ -142,6 +142,24 @@ def find_triage(u, album_name=TRIAGE_ALBUM):
                        order='Oldest First', limit=None)
 
 
+def delete_photos(name):
+    """Delete the assets in variable `name` — and make that the implicit input too.
+
+    On 2026-10-31 Photo Curator Delete, holding exactly the right 213 assets in
+    Targets, asked to delete 3,240 photos, and the dialog opened on two keepers. 3,240
+    is 1+2+...+80: the Repeat Results of the keep loop directly above, where each pass
+    ends in Add to Variable and so outputs the whole growing Keepers list. Delete
+    Photos was handed the previous action's output rather than (or as well as) its
+    `photos` parameter. A parameter that is stored and not honoured, again.
+
+    Get Variable immediately before it makes both readings the same list, so it no
+    longer matters which one the runtime uses. verify_shortcuts.py fails the build if
+    anything ever sits between the two.
+    """
+    return [action('is.workflow.actions.getvariable', UUID=uid(), WFVariable=var(name)),
+            action('is.workflow.actions.deletephotos', UUID=uid(), photos=var(name))]
+
+
 def add_each_to_album(items, album_name):
     return repeat_each(items, [
         action('is.workflow.actions.savetocameraroll',
@@ -589,8 +607,7 @@ def build_delete():
         append_var('Keepers', out(kpick, 'Item from List')),
     ])
 
-    acts.append(action('is.workflow.actions.deletephotos', UUID=uid(),
-                       photos=var('Targets')))
+    acts += delete_photos('Targets')
 
     # Record this batch's keepers on their own, so the marking can be undone. Cleared
     # first, because this album is "the last batch" and not "every batch".
@@ -629,8 +646,7 @@ def build_delete_manual():
                WFItemSpecifier='Item At Index', WFItemIndex=var('Repeat Item')),
         append_var('Targets', out(picked, 'Item from List')),
     ])
-    acts.append(action('is.workflow.actions.deletephotos', UUID=uid(),
-                       photos=var('Targets')))
+    acts += delete_photos('Targets')
     acts += clear_album(MANUAL_ALBUM)
     return acts, ['ActionExtension']
 
@@ -738,7 +754,7 @@ def build_quick_delete():
                                  'the deletion — and cancel if that count looks wrong.',
                                  var('Asked'), out(counted, 'Count'))))
     acts.append(action('is.workflow.actions.previewdocument', WFInput=var('Matched')))
-    acts.append(action('is.workflow.actions.deletephotos', UUID=uid(), photos=var('Matched')))
+    acts += delete_photos('Matched')
     acts.append(action('is.workflow.actions.showresult',
                        Text=text('Deleted {} matched asset(s) for {} name(s).',
                                  out(counted, 'Count'), var('Asked'))))

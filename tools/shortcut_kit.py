@@ -100,6 +100,9 @@ KEY_PROVENANCE = {
     'is.workflow.actions.savetocameraroll':   ('WFInput', 'live: Refresh Triage'),
     'is.workflow.actions.removefromalbum':    ('WFInput', 'loctable: Remove ${WFInput} from ${WFRemoveAlbumSelectedGroup}'),
     'is.workflow.actions.deletephotos':       ('photos', 'live: Delete Photos By Index'),
+    # No live example in this library; the loctable labels the parameter
+    # "Variable (WFVariable)". The value is the usual variable attachment.
+    'is.workflow.actions.getvariable':        ('WFVariable', 'loctable: Variable (WFVariable)'),
     'is.workflow.actions.previewdocument':    ('WFInput', 'loctable: Show ${WFInput} in Quick Look'),
     'is.workflow.actions.showresult':         (None, 'live: Delete Photos By Index'),
     'is.workflow.actions.notification':       (None, 'loctable: Show notification ${WFNotificationActionBody}'),

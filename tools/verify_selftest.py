@@ -140,6 +140,18 @@ def m_keeps_resolved_after_delete(all_acts):
     return all_acts
 
 
+def m_delete_after_a_loop(all_acts):
+    """Delete Photos straight after a loop, as it was until 2026-10-31.
+
+    The phone deleted the previous action's output — the keep loop's Repeat Results,
+    3,240 keepers — instead of the Targets it was given.
+    """
+    acts = all_acts['Photo Curator Delete']
+    d = find_action(acts, 'is.workflow.actions.deletephotos')
+    del acts[d - 1]
+    return all_acts
+
+
 MUTATIONS = [
     ('wrong input key for the action', m_wrong_input_key),
     ('magic variable pointing nowhere', m_dangling_magic_variable),
@@ -149,6 +161,7 @@ MUTATIONS = [
     ('repeat over a library-wide scan', m_library_wide_repeat),
     ('Triaged marked from a scan, not from the keep list', m_triaged_from_a_scan),
     ('a position resolved after the delete shifted it', m_keeps_resolved_after_delete),
+    ('Delete Photos fed by whatever happens to precede it', m_delete_after_a_loop),
 ]
 
 
