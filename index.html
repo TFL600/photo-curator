@@ -1976,10 +1976,19 @@ function nextStage() {
     const items = photos.filter(p => p.kind === kind && p.decision === null);
     if (items.length) { renderStage(kind, items); return; }
   }
+  // Hundreds of decoded tiles otherwise stay in the DOM for the rest of the session.
+  stageGrid.innerHTML = '';
   enterSwiper();
 }
 
+// The next category renders synchronously under the finger, with the same button in
+// the same place now reading "Delete all N" for a grid nobody has seen. A double tap
+// used to bin it.
+let stageShownAt = 0;
+const STAGE_TAP_GUARD_MS = 500;
+
 function renderStage(kind, items) {
+  stageShownAt = Date.now();
   stageItems = items;
   stagePicked = new Set();
   stageTitle.textContent = KIND_LABEL[kind] || kind;
@@ -2057,8 +2066,10 @@ function commitStage() {
   nextStage();
 }
 
-btnStageGo.addEventListener('click', commitStage);
+const stageJustShown = () => Date.now() - stageShownAt < STAGE_TAP_GUARD_MS;
+btnStageGo.addEventListener('click', () => { if (!stageJustShown()) commitStage(); });
 btnStageAll.addEventListener('click', () => {
+  if (stageJustShown()) return;
   // Escape hatch: treat the whole category as ordinary photos.
   stagePicked = new Set(stageItems);
   commitStage();
@@ -2257,7 +2268,12 @@ videoProgressWrap.addEventListener('touchmove', (e) => {
   e.stopPropagation();
   applyVideoScrub(e.touches[0]);
 }, { passive: true });
-videoProgressWrap.addEventListener('touchend', () => { videoScrubbing = false; });
+// touchend too: let through, it reached the swiper with the previous swipe's origin
+// and drag flag still set, and a tap on the bar decided the video.
+videoProgressWrap.addEventListener('touchend', (e) => {
+  e.stopPropagation();
+  videoScrubbing = false;
+});
 
 // ── Swiper ──────────────────────────────────────────────
 const btnUndo = document.getElementById('btn-undo');
@@ -2515,6 +2531,10 @@ let touchStartX = 0, touchStartY = 0;
 let dragging = false;
 let draggingUp = false;
 let pinching = false, pinchStartDist = 0, pinchStartZoom = 1;
+// A pinch ends when the first finger lifts, but the second is still down. Until it
+// lifts too, its movement is the tail of the pinch and never a swipe: measured from
+// the first finger's start point it read as one, and decided the photo.
+let pinchTail = false;
 let panStartX = 0, panStartY = 0, panStartOffsetX = 0, panStartOffsetY = 0;
 
 function pinchDist(touches) {
@@ -2535,16 +2555,19 @@ function swipeLocked() {
 
 swiper.addEventListener('touchstart', (e) => {
   if (swipeLocked()) return;
-  controlsTouch = !!e.target.closest('#video-controls');
+  // Buttons too: a tap on rotate (top-left) also counted as a "previous" tap.
+  controlsTouch = !!e.target.closest('#video-controls, button');
   if (controlsTouch) return;
   if (e.touches.length === 2) {
     pinching = true;
+    pinchTail = false;
     dragging = false;
     draggingUp = false;
     pinchStartDist = pinchDist(e.touches);
     pinchStartZoom = zoom;
     return;
   }
+  pinchTail = false;
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
   panStartX = e.touches[0].clientX;
@@ -2564,6 +2587,7 @@ swiper.addEventListener('touchmove', (e) => {
     applyMediaTransform();
     return;
   }
+  if (pinchTail && zoom === 1) return;
   if (zoom > 1) {
     // pan mode
     panX = panStartOffsetX + (e.touches[0].clientX - panStartX);
@@ -2605,14 +2629,32 @@ swiper.addEventListener('touchend', (e) => {
     dragging = false;
     draggingUp = false;
     if (zoom < 1.05) resetZoom();
+    if (e.touches.length) {
+      // Still zoomed, the remaining finger pans — from where it is, not from where
+      // the first finger started.
+      pinchTail = true;
+      panStartX = e.touches[0].clientX;
+      panStartY = e.touches[0].clientY;
+      panStartOffsetX = panX;
+      panStartOffsetY = panY;
+    }
+    return;
+  }
+  if (pinchTail) {
+    if (!e.touches.length) pinchTail = false;
     return;
   }
 
   const touch = e.changedTouches[0];
   const dx = touch.clientX - touchStartX;
   const dy = touch.clientY - touchStartY;
+  // Read once and clear: a decided swipe used to leave `dragging` set, so the next
+  // touchend to arrive without a touchstart (the video bar) replayed it.
+  const wasDragging = dragging, wasDraggingUp = draggingUp;
+  dragging = false;
+  draggingUp = false;
 
-  if (!dragging && !draggingUp && zoom === 1) {
+  if (!wasDragging && !wasDraggingUp && zoom === 1) {
     const stripTop = thumbStrip.getBoundingClientRect().top;
     if (touch.clientY >= stripTop) return; // tap in thumb strip — handled by strip scrub
     const W = window.innerWidth;
@@ -2623,8 +2665,7 @@ swiper.addEventListener('touchend', (e) => {
 
   if (zoom > 1) return; // end pan — keep position
 
-  if (draggingUp) {
-    draggingUp = false;
+  if (wasDraggingUp) {
     if (dy < -50) {
       decisionOverlay.style.opacity = '';
       decide('album');
@@ -2641,14 +2682,14 @@ swiper.addEventListener('touchend', (e) => {
     return;
   }
 
-  if (dragging && Math.abs(dx) > 50) {
+  if (wasDragging && Math.abs(dx) > 50) {
     decisionOverlay.style.opacity = '';
     if (dx < 0) decide('delete');
     else decide('keep');
     return;
   }
 
-  if (dragging) {
+  if (wasDragging) {
     photoContainer.classList.add('animating');
     photoContainer.style.transform = '';
     photoContainer.style.opacity = '';
@@ -2754,6 +2795,10 @@ function showConfirm() {
     div.className = 'thumb-item';
     const img = document.createElement('img');
     img.alt = p.name;
+    // Up to ~300 full 800px images, rebuilt on every rescue tap: decode only what
+    // is on screen.
+    img.loading = 'lazy';
+    img.decoding = 'async';
     if (p.type === 'video') {
       if (p.thumb) { img.src = p.thumb; }
       else { getVideoThumb(p.url).then(t => { p.thumb = t; img.src = t; }); }
@@ -2933,6 +2978,18 @@ function describeSend(entry) {
 document.getElementById('btn-album-shortcut').addEventListener('click', () => {
   const input = buildAlbumInput();
   if (!input) return;
+  // Add Photos To Album By Index counts positions in Triage. A hand-picked batch was
+  // counted in Triage Manual, so every one of its positions names a backlog photo.
+  if (isManualBatch()) {
+    alert('★ only works for a Triage export: this batch was counted in Triage Manual, ' +
+          'so its positions would pick the wrong photos.');
+    return;
+  }
+  // After a delete the album has shifted, and the same positions name other photos.
+  const sent = previousSend();
+  if (sent && !confirm(`This export was already sent for deletion ${describeSend(sent)}. ` +
+      'If that went through, these positions now name different photos.\n\n' +
+      'Add to the album anyway?')) return;
   const url = 'shortcuts://run-shortcut?name=Add%20Photos%20To%20Album%20By%20Index&input=' + encodeURIComponent(input);
   window.location.href = url;
 });
@@ -3012,6 +3069,8 @@ document.getElementById('btn-reswipe').addEventListener('click', () => {
 btnRestart.addEventListener('click', () => {
   cancelSettle();
   releasePhotos();
+  stageGrid.innerHTML = '';
+  thumbGrid.innerHTML = '';
   manifest = null;
   index = 0;
   decisionStack = [];

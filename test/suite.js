@@ -303,6 +303,7 @@ export async function run(filter) {
     files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC\nIMG_1002.HEIC'));
     const res = await pc.validateSelection(files);
     await pc.startSession(res.entries, res.manifest);
+    await new Promise(r => setTimeout(r, 550));   // a person looks before tapping
     document.getElementById('btn-stage-all').click();
     eq('now swiping', pc.activeScreen(), 'swiper');
     eq('nothing decided', pc.photos.filter(p => p.decision).length, 0);
@@ -322,6 +323,23 @@ export async function run(filter) {
     eq('then swiping', pc.activeScreen(), 'swiper');
     eq('all three binned', pc.indicesFor('delete'), [1, 4, 5]);
     eq('swiper starts on the first survivor', pc.index, 1);
+  });
+
+  await test('a double tap on the stage button does not bin the next category unseen', async () => {
+    const files = await goodExport(6);
+    files.push(textFile('group-whatsapp.txt', 'IMG_1001.HEIC'));
+    files.push(textFile('group-screenshot.txt', 'IMG_1004.HEIC\nIMG_1005.HEIC'));
+    const res = await pc.validateSelection(files);
+    await pc.startSession(res.entries, res.manifest);
+    await new Promise(r => setTimeout(r, 550));
+    const go = document.getElementById('btn-stage-go');
+    go.click();
+    go.click();                                   // the second tap of a double tap
+    eq('screenshots still showing', document.getElementById('stage-title').textContent, 'Screenshots');
+    eq('only WhatsApp binned', pc.indicesFor('delete'), [1]);
+    await new Promise(r => setTimeout(r, 550));
+    go.click();
+    eq('a deliberate tap still works', pc.indicesFor('delete'), [1, 4, 5]);
   });
 
   await test('a fully staged-out export goes straight to confirm', async () => {
@@ -649,6 +667,88 @@ export async function run(filter) {
   // All three are about the 290ms window between a swipe and the card being gone.
   // None of them were reachable from the old suite, because the old suite only ever
   // called decide() one at a time and never from the end of the stack.
+
+  // ── Real touches (2026-10-31) ───────────────────────────────────────────
+  //
+  // Everything above calls decide() directly, so the touch handlers themselves were
+  // never exercised. Each of these is a gesture that recorded a decision, or moved to
+  // another photo, without the user swiping anything.
+
+  function fire(target, type, touches, changed = touches) {
+    const mk = t => new Touch({ identifier: t.id, target, clientX: t.x, clientY: t.y });
+    target.dispatchEvent(new TouchEvent(type, {
+      touches: touches.map(mk), targetTouches: touches.map(mk),
+      changedTouches: changed.map(mk), bubbles: true, cancelable: true,
+    }));
+  }
+
+  function swipe(target, x0, x1, y = 300) {
+    const a = { id: 1, x: x0, y }, b = { id: 1, x: x1, y };
+    fire(target, 'touchstart', [a]);
+    fire(target, 'touchmove', [{ id: 1, x: (x0 + x1) / 2, y }]);
+    fire(target, 'touchmove', [b]);
+    fire(target, 'touchend', [], [b]);
+  }
+
+  await test('a real swipe decides, as a sanity check for the touch tests', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    swipe(document.getElementById('screen-swiper'), 300, 120);
+    pc.settleNow();
+    eq('first photo deleted by touch', pc.photos[0].decision, 'delete');
+  });
+
+  await test('tapping the video bar after a swipe decides nothing', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    const swiper = document.getElementById('screen-swiper');
+    swipe(swiper, 300, 120);
+    pc.settleNow();
+    // The bar stops touchstart reaching the swiper but used to let touchend through,
+    // where the previous swipe's origin and drag flag were still set.
+    const bar = document.getElementById('video-progress-wrap');
+    fire(bar, 'touchstart', [{ id: 2, x: 60, y: 300 }]);
+    fire(bar, 'touchend', [], [{ id: 2, x: 60, y: 300 }]);
+    pc.settleNow();
+    eq('second photo untouched', pc.photos[1].decision, null);
+    eq('still on it', pc.index, 1);
+  });
+
+  await test('a pinch that ends with one finger still down decides nothing', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    const swiper = document.getElementById('screen-swiper');
+    const f1 = { id: 1, x: 150, y: 300 }, f2 = { id: 2, x: 250, y: 300 };
+    fire(swiper, 'touchstart', [f1]);
+    fire(swiper, 'touchstart', [f1, f2]);
+    // Zoom in to look, then back out to about 1x: the ordinary inspect-and-let-go.
+    fire(swiper, 'touchmove', [{ id: 1, x: 140, y: 300 }, { id: 2, x: 260, y: 300 }]);
+    fire(swiper, 'touchmove', [{ id: 1, x: 150, y: 300 }, { id: 2, x: 250, y: 300 }]);
+    fire(swiper, 'touchend', [{ id: 2, x: 250, y: 300 }], [{ id: 1, x: 150, y: 300 }]);
+    // The second finger drifts as it lifts — measured from the first finger's start,
+    // that used to read as a 230px swipe right.
+    fire(swiper, 'touchmove', [{ id: 2, x: 380, y: 300 }]);
+    fire(swiper, 'touchend', [], [{ id: 2, x: 380, y: 300 }]);
+    pc.settleNow();
+    eq('first photo untouched', pc.photos[0].decision, null);
+    eq('still on it', pc.index, 0);
+  });
+
+  await test('tapping a button on the swiper does not also navigate', async () => {
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    const swiper = document.getElementById('screen-swiper');
+    // Skip photo 1 with a right-third tap, so there is an undecided photo behind.
+    const W = window.innerWidth;
+    fire(swiper, 'touchstart', [{ id: 1, x: W - 10, y: 300 }]);
+    fire(swiper, 'touchend', [], [{ id: 1, x: W - 10, y: 300 }]);
+    eq('skipped forward', pc.index, 1);
+    // Rotate sits top-left, in the "go back" third.
+    const rot = document.getElementById('btn-rotate');
+    fire(rot, 'touchstart', [{ id: 2, x: 20, y: 20 }]);
+    fire(rot, 'touchend', [], [{ id: 2, x: 20, y: 20 }]);
+    eq('still on the photo being rotated', pc.index, 1);
+  });
 
   await test('a second swipe inside the animation window decides the next photo', async () => {
     const res = await pc.validateSelection(await goodExport(4));
