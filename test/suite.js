@@ -834,6 +834,38 @@ export async function run(filter) {
     eq('round-trips through storage', log[0].input, '1,3|2,4');
   });
 
+  // Reopening a folder restores its decisions and lands on a live Delete button. After
+  // a send that worked, the album has shifted and the same string deletes keepers.
+  await test('an export already sent says so, and asks before sending again', async () => {
+    localStorage.removeItem('batchLog');
+    const res = await pc.validateSelection(await goodExport(3));
+    await pc.startSession(res.entries, res.manifest);
+    pc.photos.forEach((p, i) => { p.decision = i ? 'keep' : 'delete'; });
+    pc.showConfirm();
+    const warn = document.getElementById('sent-warn');
+    eq('never sent: no warning', warn.style.display, 'none');
+
+    pc.logBatch('delete');
+    pc.showConfirm();
+    eq('sent: warning shown', warn.style.display, '');
+    check('and says what it knows', /Already sent to Shortcuts today/.test(warn.textContent), warn.textContent);
+
+    const realConfirm = window.confirm;
+    let asked = 0;
+    window.confirm = () => { asked++; return false; };
+    try { document.getElementById('btn-delete').click(); }
+    finally { window.confirm = realConfirm; }
+    eq('asked before sending again', asked, 1);
+    eq('declining sends nothing', pc.readLog().length, 1);
+
+    const other = await pc.validateSelection(await goodExport(3, { exportedAt: '2026-09-07T09:00:00Z' }));
+    await pc.startSession(other.entries, other.manifest);
+    pc.photos.forEach(p => { p.decision = 'keep'; });
+    pc.showConfirm();
+    eq('a different export is not warned about', warn.style.display, 'none');
+    localStorage.removeItem('batchLog');
+  });
+
   await test('the manual route is reachable and explains itself', async () => {
     document.getElementById('btn-manual-help').click();
     eq('shows the manual screen', pc.activeScreen(), 'manual');

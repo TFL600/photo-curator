@@ -294,6 +294,17 @@
       padding: 8px 10px;
     }
 
+    /* This export was sent before: said where the button is, not in the banner. */
+    .sent-warn {
+      font-size: 12px;
+      color: #8e2a2a;
+      line-height: 1.45;
+      background: rgba(184,50,50,0.08);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+
     .index-summary {
       font-size: 12px;
       color: var(--text-light);
@@ -1396,6 +1407,7 @@
   </div>
 
   <div class="confirm-dock">
+    <div class="sent-warn" id="sent-warn" style="display:none"></div>
     <div class="index-summary" id="delete-index-summary"></div>
     <button class="btn-danger" id="btn-delete">Delete</button>
   </div>
@@ -2715,6 +2727,14 @@ function showConfirm() {
   document.getElementById('rescue-hint').style.display =
     photos.some(p => p.decision === 'delete') ? '' : 'none';
   document.getElementById('album-index-summary').textContent  = describeIndices(indicesFor('album'));
+  const sent = previousSend();
+  const sentWarn = document.getElementById('sent-warn');
+  sentWarn.style.display = sent ? '' : 'none';
+  sentWarn.textContent = sent
+    ? `Already sent to Shortcuts ${describeSend(sent)}. If that run went through, the ` +
+      `album has changed and sending again hits the wrong photos — only send again if ` +
+      `it was cancelled.`
+    : '';
   document.getElementById('btn-copy').textContent = 'Copy delete indices';
   btnDelete.textContent = 'Delete';
   btnDelete.classList.remove('btn-finish');
@@ -2884,6 +2904,32 @@ function logBatch(kind) {
   return entry;
 }
 
+// The last time this very export was sent to Shortcuts, if it ever was.
+//
+// Reopening the same folder restores every decision and lands on this screen with a
+// live Delete button — which is exactly right after iOS reloads the page mid-send
+// (2026-10-31: the first send was cancelled and the batch had to go again), and
+// exactly wrong after a send that worked. By then the album has lost the deleted
+// photos, every later position names a different one, and the same string deletes
+// keepers. Nothing can tell those two cases apart from here, so the app says what it
+// knows and asks rather than blocking.
+function previousSend() {
+  if (!manifest) return null;
+  return readLog().find(e =>
+    e.exportedAt === (manifest.exportedAt || null) &&
+    e.album === (manifest.album || null) &&
+    e.build === (manifest.build || null) &&
+    e.count === photos.length) || null;
+}
+
+function describeSend(entry) {
+  const d = new Date(entry.at);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString()
+    ? `today at ${time}`
+    : `on ${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
+}
+
 document.getElementById('btn-album-shortcut').addEventListener('click', () => {
   const input = buildAlbumInput();
   if (!input) return;
@@ -2909,6 +2955,10 @@ btnDelete.addEventListener('click', () => {
   // An empty delete pile is no longer a special case with its own shortcut: it is
   // just "|1,2,3", nothing on the left. The old second shortcut only ran sometimes,
   // and so had never run at all.
+  const sent = previousSend();
+  if (sent && !confirm(`This export was already sent to Shortcuts ${describeSend(sent)}.\n\n` +
+      'Send it again only if that run was cancelled or failed. If it went through, ' +
+      'export again instead.')) return;
   const input = deleteShortcutInput();
   logBatch(buildInput() ? 'delete' : 'mark-only');
   window.location.href = 'shortcuts://run-shortcut?name='
@@ -2982,7 +3032,7 @@ if (new URLSearchParams(location.search).has('test')) {
     validateSelection, startSession, enterSwiper, decide, undo, showConfirm,
     buildInput, buildAlbumInput, buildKeepInput, buildShortcutInput,
     deleteShortcutName, deleteShortcutInput, isManualBatch,
-    logBatch, readLog, indicesFor, parseIndexedName,
+    logBatch, readLog, previousSend, indicesFor, parseIndexedName,
     parseExportDate, exportDuration,
     normaliseAssetName, isVideoFile, commitStage, showEmptyExport,
     manifestKeyFor, restoreDecisions, persistDecisions, forgetDecisions,
